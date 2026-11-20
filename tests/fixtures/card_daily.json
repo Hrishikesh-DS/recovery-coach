@@ -1,0 +1,387 @@
+{
+ "date": "2026-11-19",
+ "recovery": {
+  "score": 82,
+  "zone": "green",
+  "uncapped": 82,
+  "contributors": [
+   {
+    "name": "HRV",
+    "value": 68.4,
+    "baseline": 58.1,
+    "z": 1.12,
+    "points": 21.9
+   },
+   {
+    "name": "Sleeping HR",
+    "value": 47.2,
+    "baseline": 49.0,
+    "z": 0.81,
+    "points": 5.3
+   },
+   {
+    "name": "Sleep performance",
+    "value": 0.91,
+    "baseline": 0.94,
+    "z": -0.35,
+    "points": -1.7
+   },
+   {
+    "name": "Respiratory rate",
+    "value": 14.6,
+    "baseline": 14.8,
+    "z": 0.0,
+    "points": 0.0
+   }
+  ],
+  "cap_reason": null,
+  "reason_missing": null
+ },
+ "sleep": {
+  "actual_min": 467,
+  "need_min": 513,
+  "perf": 0.91,
+  "debt_min": 14,
+  "naps_min": 0,
+  "efficiency": 0.94,
+  "consistency_min": 24,
+  "interruptions": 2,
+  "deep_min": 58,
+  "rem_min": 104,
+  "onset": "2026-11-18T22:41:00-06:00",
+  "wake": "2026-11-19T06:58:00-06:00",
+  "bedtime_tonight": "2026-11-19T22:35:00-06:00"
+ },
+ "strain": {
+  "yesterday": 13.4,
+  "flag": null,
+  "today_so_far": 1.2,
+  "target": [
+   14,
+   18
+  ],
+  "workouts": [
+   {
+    "kind": "running",
+    "start": "2026-11-18T06:32:00-06:00",
+    "minutes": 42.0,
+    "strain": 10.8
+   },
+   {
+    "kind": "traditionalStrengthTraining",
+    "start": "2026-11-18T18:05:00-06:00",
+    "minutes": 55.0,
+    "strain": 7.9
+   }
+  ]
+ },
+ "stress": {
+  "score": 1.07,
+  "band": "medium",
+  "hourly": [
+   [
+    "2026-11-18T07:00:00-06:00",
+    0.4
+   ],
+   [
+    "2026-11-18T08:00:00-06:00",
+    0.7
+   ],
+   [
+    "2026-11-18T09:00:00-06:00",
+    1.1
+   ],
+   [
+    "2026-11-18T10:00:00-06:00",
+    2.3
+   ],
+   [
+    "2026-11-18T11:00:00-06:00",
+    1.8
+   ],
+   [
+    "2026-11-18T12:00:00-06:00",
+    1.2
+   ],
+   [
+    "2026-11-18T13:00:00-06:00",
+    0.9
+   ],
+   [
+    "2026-11-18T14:00:00-06:00",
+    1.6
+   ],
+   [
+    "2026-11-18T15:00:00-06:00",
+    2.1
+   ],
+   [
+    "2026-11-18T16:00:00-06:00",
+    1.4
+   ],
+   [
+    "2026-11-18T17:00:00-06:00",
+    0.8
+   ],
+   [
+    "2026-11-18T18:00:00-06:00",
+    0.6
+   ],
+   [
+    "2026-11-18T19:00:00-06:00",
+    1.0
+   ],
+   [
+    "2026-11-18T20:00:00-06:00",
+    0.7
+   ],
+   [
+    "2026-11-18T21:00:00-06:00",
+    0.3
+   ],
+   [
+    "2026-11-18T22:00:00-06:00",
+    0.2
+   ]
+  ],
+  "top_hours": [
+   "2026-11-18T10:00:00-06:00",
+   "2026-11-18T15:00:00-06:00",
+   "2026-11-18T11:00:00-06:00"
+  ],
+  "reason": null
+ },
+ "load": {
+  "ctl": 121.4,
+  "atl": 134.8,
+  "tsb": -13.4,
+  "acwr": 1.11,
+  "acwr_flag": null
+ },
+ "flags": [],
+ "trend": [
+  {
+   "date": "2026-11-13",
+   "recovery": 61,
+   "zone": "yellow",
+   "strain": 12.8,
+   "perf": 0.86
+  },
+  {
+   "date": "2026-11-14",
+   "recovery": 44,
+   "zone": "yellow",
+   "strain": 15.9,
+   "perf": 0.74
+  },
+  {
+   "date": "2026-11-15",
+   "recovery": 71,
+   "zone": "green",
+   "strain": 9.4,
+   "perf": 0.97
+  },
+  {
+   "date": "2026-11-16",
+   "recovery": 58,
+   "zone": "yellow",
+   "strain": 14.1,
+   "perf": 0.88
+  },
+  {
+   "date": "2026-11-17",
+   "recovery": 29,
+   "zone": "red",
+   "strain": 6.2,
+   "perf": 0.63
+  },
+  {
+   "date": "2026-11-18",
+   "recovery": 66,
+   "zone": "yellow",
+   "strain": 13.4,
+   "perf": 0.92
+  },
+  {
+   "date": "2026-11-19",
+   "recovery": 82,
+   "zone": "green",
+   "strain": null,
+   "perf": 0.91
+  }
+ ],
+ "bands": {
+  "hrv": [
+   {
+    "date": "2026-11-06",
+    "value": 57,
+    "centre": 56.5,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-07",
+    "value": 61,
+    "centre": 56.6,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-08",
+    "value": 55,
+    "centre": 56.8,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-09",
+    "value": 63,
+    "centre": 57.0,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-10",
+    "value": 52,
+    "centre": 57.1,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-11",
+    "value": 49,
+    "centre": 57.2,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-12",
+    "value": 60,
+    "centre": 57.4,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-13",
+    "value": 58,
+    "centre": 57.5,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-14",
+    "value": 66,
+    "centre": 57.7,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-15",
+    "value": 54,
+    "centre": 57.9,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-16",
+    "value": 62,
+    "centre": 58.0,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-17",
+    "value": 59,
+    "centre": 58.1,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-18",
+    "value": 47,
+    "centre": 58.3,
+    "spread": 6.2
+   },
+   {
+    "date": "2026-11-19",
+    "value": 68.4,
+    "centre": 58.5,
+    "spread": 6.2
+   }
+  ],
+  "sleep_hr": [
+   {
+    "date": "2026-11-06",
+    "value": 49,
+    "centre": 49.4,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-07",
+    "value": 48,
+    "centre": 49.4,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-08",
+    "value": 50,
+    "centre": 49.3,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-09",
+    "value": 48,
+    "centre": 49.3,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-10",
+    "value": 51,
+    "centre": 49.3,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-11",
+    "value": 52,
+    "centre": 49.2,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-12",
+    "value": 49,
+    "centre": 49.2,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-13",
+    "value": 49,
+    "centre": 49.2,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-14",
+    "value": 47,
+    "centre": 49.2,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-15",
+    "value": 50,
+    "centre": 49.1,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-16",
+    "value": 48,
+    "centre": 49.1,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-17",
+    "value": 48,
+    "centre": 49.1,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-18",
+    "value": 53,
+    "centre": 49.0,
+    "spread": 1.3
+   },
+   {
+    "date": "2026-11-19",
+    "value": 47.2,
+    "centre": 49.0,
+    "spread": 1.3
+   }
+  ]
+ }
+}

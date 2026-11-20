@@ -1,0 +1,581 @@
+<meta name="dash-one-writer">
+<style>
+#dash-root{--dash-gutter:0}
+.rc{--night:#0D1218;--deck:#151C24;--rule:#232D38;--chalk:#EDF1F5;--fog:#8F9BA8;--mist:#5F6B78;--green:#34E089;--yellow:#F5C542;--red:#FF5468;--strain:#3EA6FF;--sleep:#9A8CFF;--hr:#FF8FAB;--orange:#FF7A45;
+  background:var(--night);color:var(--chalk);font:400 15px/1.4 system-ui,-apple-system,"SF Pro Text","Segoe UI",Roboto,sans-serif;padding:24px 20px 40px;min-height:100vh}
+.rc *{box-sizing:border-box}
+.rc [hidden]{display:none!important}
+.rc-in{max-width:1080px;margin:0 auto}
+.rc .n{font-family:ui-rounded,"SF Pro Rounded",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.rc h1{font-size:20px;font-weight:500;margin:0}
+.rc h2{font-size:15px;font-weight:500;margin:0}
+.rc-note{color:var(--fog);font-size:13px;margin:2px 0 16px}
+.rc-hero{display:grid;justify-items:center;text-align:center;margin:24px 0 4px}
+.rc-ring{position:relative;width:180px;height:180px}
+.rc-ring svg{display:block}
+.rc-ring-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.rc-score{font-size:64px;font-weight:500;letter-spacing:-.02em;line-height:1}
+.rc-score small{font-size:28px;letter-spacing:0;margin-left:2px}
+.rc-ring-c span.rc-l{color:var(--fog);font-size:13px;margin-top:4px}
+.rc-lead{font-size:20px;font-weight:500;margin:16px 0 2px}
+.rc-sub{color:var(--fog);font-size:13px;margin:0}
+.rc-z-green{color:var(--green)}.rc-z-yellow{color:var(--yellow)}.rc-z-red{color:var(--red)}.rc-z-none{color:var(--fog)}
+.rc-toggle{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--deck);margin:24px 0 20px}
+.rc-toggle button{font:inherit;font-size:13px;font-weight:500;color:var(--fog);background:transparent;border:0;border-radius:999px;padding:6px 18px;cursor:pointer}
+.rc-toggle button[aria-pressed="true"]{background:var(--rule);color:var(--chalk)}
+.rc-toggle button:focus-visible{outline:2px solid var(--strain);outline-offset:1px}
+.rc-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 20px;border-top:1px solid var(--rule);padding:20px 0 28px}
+.rc-label{color:var(--fog);font-size:13px}
+.rc-big{font-size:28px;font-weight:500;letter-spacing:-.02em;line-height:1.15;margin:4px 0 4px}
+.rc-big .rc-u{font-size:13px;font-weight:400;letter-spacing:0;color:var(--fog);margin-left:3px}
+.rc-delta{font-size:13px;color:var(--mist)}
+.rc-good{color:var(--green)}.rc-bad{color:var(--red)}
+.rc-grid{display:grid;column-gap:56px}
+.rc-sec{border-top:1px solid var(--rule);padding:20px 0 28px;min-width:0}
+.rc-chart{position:relative;min-height:190px;color:var(--fog);font-size:13px}
+.rc-chart svg{display:block;overflow:visible}
+.rc-chart svg text{fill:var(--mist);font-size:11px;font-family:inherit}
+.rc-tip{position:absolute;pointer-events:none;background:var(--deck);border:1px solid var(--rule);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--chalk);white-space:nowrap;z-index:2}
+.rc-tip b{font-weight:500}
+.rc-key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:var(--mist);margin-top:12px}
+.rc-key i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.rc-key i.rc-line{width:14px;height:2px;border-radius:1px;vertical-align:middle}
+.rc-age{display:flex;align-items:baseline;gap:6px;margin-top:4px}
+.rc-age-vs{font-size:13px;margin:2px 0 0}
+.rc-table{width:100%;border-collapse:collapse;font-size:15px}
+.rc-table th{font-weight:400;font-size:11px;color:var(--mist);text-align:left;padding:0 12px 8px 0}
+.rc-table td{border-top:1px solid var(--rule);padding:12px 12px 12px 0;vertical-align:top}
+.rc-table td:first-child::first-letter{text-transform:uppercase}
+.rc-table td:nth-child(2){color:var(--fog)}
+.rc-table th:last-child,.rc-table td:last-child{text-align:right;padding-right:0;width:72px}
+.rc-table td:last-child{font-weight:500;font-family:ui-rounded,"SF Pro Rounded",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.rc-dv{display:block;position:relative;height:4px;border-radius:2px;background:var(--rule);margin-top:8px}
+.rc-dv::after{content:"";position:absolute;left:50%;top:-4px;bottom:-4px;width:1px;background:var(--mist)}
+.rc-dv i{position:absolute;top:0;bottom:0;border-radius:2px}
+.rc-empty{display:grid;justify-items:center;text-align:center;gap:20px;padding:56px 0 72px}
+.rc-empty p{color:var(--fog);font-size:15px;max-width:320px;margin:0}
+@media (min-width:720px){
+  .rc{padding:32px 40px 48px}
+  .rc-hero{grid-template-columns:auto 1fr;justify-items:start;text-align:left;column-gap:36px;align-items:center}
+  .rc-lead{margin-top:0;font-size:28px;letter-spacing:-.01em}
+  .rc-hero .rc-sub{font-size:15px}
+  .rc-tiles{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .rc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rc-wide{grid-column:1/-1}
+}
+@media (max-width:599px){
+  .rc-table th:first-child,.rc-table td:first-child{display:none}
+  .rc-table td:nth-child(2){color:var(--chalk)}
+  .rc-toggle{display:flex}.rc-toggle button{flex:1}
+}
+</style>
+<div class="rc">
+<div class="rc-in">
+  <header>
+    <h1>Recovery</h1>
+  </header>
+
+  <section class="rc-empty" id="empty" hidden>
+    <svg width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Empty recovery ring: no mornings saved yet"><circle cx="90" cy="90" r="84" fill="none" stroke="#232D38" stroke-width="12"/></svg>
+    <p>Your first morning check fills this in. Say 'recovery' to Claude from the phone app.</p>
+  </section>
+
+  <div id="main">
+    <section class="rc-hero" id="latest" aria-label="Latest morning">
+      <div class="rc-ring">
+        <div data-draw="hero-ring"></div>
+        <div class="rc-ring-c"><div class="rc-score n"><span data-draw="hero-score" data-source="summary" data-field="last_recovery" data-row="0">—</span><small>%</small></div><span class="rc-l">Recovery</span></div>
+      </div>
+      <div>
+        <p class="rc-lead"><span class="rc-z-green" data-lead="green" hidden>Ready to push</span><span class="rc-z-yellow" data-lead="yellow" hidden>Steady day</span><span class="rc-z-red" data-lead="red" hidden>Take it easy</span><span class="rc-z-none" data-lead="none" hidden>No score that morning</span><span data-draw="hero-lead"></span></p>
+        <p class="rc-sub" data-draw="summary-line" data-source="summary">—</p>
+      </div>
+    </section>
+
+    <div class="rc-toggle" role="group" aria-label="Range">
+      <button type="button" data-range="30" aria-pressed="true">30 days</button>
+      <button type="button" data-range="90" aria-pressed="false">90 days</button>
+    </div>
+
+    <section class="rc-tiles" id="tiles" aria-label="Averages for the range">
+      <div><div class="rc-label">Recovery</div><div class="rc-big n"><span data-draw="t-recovery" data-source="summary" data-field="recovery" data-row="0">—</span><span class="rc-u">%</span></div><div class="rc-delta" data-draw="d-recovery">—</div></div>
+      <div><div class="rc-label">Strain</div><div class="rc-big n"><span data-draw="t-strain" data-source="summary" data-field="strain" data-row="0">—</span></div><div class="rc-delta" data-draw="d-strain">—</div></div>
+      <div><div class="rc-label">Sleep performance</div><div class="rc-big n"><span data-draw="t-perf" data-source="summary" data-field="perf" data-row="0">—</span><span class="rc-u">%</span></div><div class="rc-delta" data-draw="d-perf">—</div></div>
+      <div><div class="rc-label">Overnight HRV</div><div class="rc-big n"><span data-draw="t-hrv" data-source="summary" data-field="hrv" data-row="0">—</span><span class="rc-u">ms</span></div><div class="rc-delta" data-draw="d-hrv">—</div></div>
+      <div><div class="rc-label">Sleeping heart rate</div><div class="rc-big n"><span data-draw="t-shr" data-source="summary" data-field="shr" data-row="0">—</span><span class="rc-u">bpm</span></div><div class="rc-delta" data-draw="d-shr">—</div></div>
+    </section>
+
+    <div class="rc-grid">
+      <section class="rc-sec rc-wide" id="recovery">
+        <h2>Recovery by day</h2>
+        <p class="rc-note">Each morning's score against your own 60-day normal.</p>
+        <div class="rc-chart" data-draw="recovery-chart" data-source="days"></div>
+        <div class="rc-key"><span><i style="background:#34E089"></i>Green 67–100, ready to push</span><span><i style="background:#F5C542"></i>Yellow 34–66, steady</span><span><i style="background:#FF5468"></i>Red 0–33, take it easy</span></div>
+      </section>
+
+      <section class="rc-sec" id="strain">
+        <h2>Strain</h2>
+        <p class="rc-note">How hard your heart worked each day, 0–21.</p>
+        <div class="rc-chart" data-draw="strain-chart" data-source="days"></div>
+      </section>
+      <section class="rc-sec" id="sleep">
+        <h2>Sleep</h2>
+        <p class="rc-note">Hours asleep; the tick marks what you needed.</p>
+        <div class="rc-chart" data-draw="sleep-chart" data-source="days"></div>
+      </section>
+
+      <section class="rc-sec" id="hrv">
+        <h2>Overnight HRV</h2>
+        <p class="rc-note">The band is your normal range (previous 60 days).</p>
+        <div class="rc-chart" data-draw="hrv-chart" data-source="bands"></div>
+      </section>
+      <section class="rc-sec" id="sleep-hr">
+        <h2>Sleeping heart rate</h2>
+        <p class="rc-note">Lower than your band usually means better recovery.</p>
+        <div class="rc-chart" data-draw="shr-chart" data-source="bands"></div>
+      </section>
+
+      <section class="rc-sec rc-wide" id="load">
+        <h2>Training load</h2>
+        <p class="rc-note">Fitness (42-day load) and fatigue (7-day load); form is fitness minus fatigue.</p>
+        <div class="rc-chart" data-draw="load-chart" data-source="days"></div>
+        <div class="rc-key"><span><i class="rc-line" style="background:#3EA6FF"></i>Fitness</span><span><i class="rc-line" style="background:#FF7A45"></i>Fatigue</span><span><i style="background:#8F9BA8;border-radius:2px"></i>Form, fresh above 0 and tired below</span></div>
+      </section>
+
+      <section class="rc-sec" id="stress">
+        <h2>Stress</h2>
+        <p class="rc-note">Heart rate while still and awake, against your 14-day normal (0–3).</p>
+        <div class="rc-chart" data-draw="stress-chart" data-source="days"></div>
+      </section>
+      <section class="rc-sec" id="body-age">
+        <h2>Body age</h2>
+        <p class="rc-note">Estimate from population research, not a medical test.</p>
+        <div class="rc-age"><span class="rc-big n"><span data-draw="body-age" data-source="latest_week" data-field="body_age" data-row="0">—</span></span><span class="rc-label">years</span></div>
+        <p class="rc-age-vs"><span data-draw="body-age-vs">—</span></p>
+        <p class="rc-age-vs rc-label">Pace of aging <span class="n" data-draw="pace" data-source="latest_week" data-field="pace" data-row="0">—</span></p>
+        <div class="rc-chart" data-draw="body-age-chart" data-source="weeks" style="min-height:150px;margin-top:12px"></div>
+      </section>
+
+      <section class="rc-sec rc-wide" id="habits">
+        <h2>Habits and next-morning recovery</h2>
+        <p class="rc-note">Associations from your journal (at least 5 days each way, 5+ points apart), not proof of cause.</p>
+        <table class="rc-table" data-source="journal" data-row-key="question">
+          <thead><tr><th data-field="question">Habit</th><th data-field="text">What we see</th><th data-field="diff">Points</th></tr></thead>
+          <tbody data-draw="journal-rows"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+(function () {
+  const C = {night: '#0D1218', deck: '#151C24', rule: '#232D38', chalk: '#EDF1F5', fog: '#8F9BA8', mist: '#5F6B78',
+    green: '#34E089', yellow: '#F5C542', red: '#FF5468', strain: '#3EA6FF', sleep: '#9A8CFF', hr: '#FF8FAB', orange: '#FF7A45'};
+  const ZONE = {green: C.green, yellow: C.yellow, red: C.red};
+  const STRESS = ['#2A3442', '#3D4754', '#CCA842', C.yellow, C.orange];   // calm -> yellow -> orange, as on the cards
+  const alpha = (hex, a) => { const v = parseInt(hex.slice(1), 16); return `rgba(${v >> 16},${(v >> 8) & 255},${v & 255},${a})`; };
+  const parse = d3.utcParse('%Y-%m-%d');
+  const fmtDay = d3.utcFormat('%-d %b');
+  const fmtLong = d3.utcFormat('%a %-d %b');
+  const range = () => Number(dash.params().range || 30);
+  const motion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: no-preference)').matches;
+
+  function sorted(rows) { return rows.filter((r) => r && r.date).slice().sort((a, b) => (a.date < b.date ? -1 : 1)); }
+  function lastN(rows, n) {
+    const s = sorted(rows);
+    if (!s.length) return [];
+    const end = parse(s[s.length - 1].date);
+    const start = d3.utcDay.offset(end, -(n - 1));
+    return s.filter((r) => parse(r.date) >= start);
+  }
+  function prevN(rows, n) {
+    const s = sorted(rows);
+    if (!s.length) return [];
+    const end = parse(s[s.length - 1].date);
+    const a = d3.utcDay.offset(end, -(2 * n - 1)), b = d3.utcDay.offset(end, -n);
+    return s.filter((r) => { const t = parse(r.date); return t >= a && t <= b; });
+  }
+  const num = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  const avg = (rows, f) => { const v = rows.map(f).filter((x) => x !== null); return v.length ? d3.mean(v) : null; };
+  const hrvMs = (r) => (num(r.hrv_ln) === null ? null : Math.exp(num(r.hrv_ln)));
+  const shr = (r) => (num(r.sleep_hr) !== null ? num(r.sleep_hr) : num(r.rhr));
+
+  dash.calc('summary', {
+    title: 'Averages for the selected range',
+    description: 'Mean of each daily value over the last 30 or 90 days, and over the same span before it.',
+    inputs: ['days'],
+    fn: (days) => {
+      const n = range(), cur = lastN(days, n), prev = prevN(days, n);
+      const s = sorted(days), last = s[s.length - 1] || {};
+      const m = (rows) => ({
+        recovery: avg(rows, (r) => num(r.recovery)), strain: avg(rows, (r) => num(r.strain)),
+        perf: avg(rows, (r) => (num(r.perf) === null ? null : num(r.perf) * 100)), hrv: avg(rows, hrvMs), shr: avg(rows, shr)});
+      const c = m(cur), p = m(prev);
+      return [{recovery: c.recovery === null ? null : Math.round(c.recovery), strain: c.strain === null ? null : Math.round(c.strain * 10) / 10,
+        perf: c.perf === null ? null : Math.round(c.perf), hrv: c.hrv === null ? null : Math.round(c.hrv), shr: c.shr === null ? null : Math.round(c.shr * 10) / 10,
+        recovery_prev: p.recovery, strain_prev: p.strain, perf_prev: p.perf, hrv_prev: p.hrv, shr_prev: p.shr,
+        last_date: last.date || null, last_recovery: num(last.recovery), last_zone: last.zone || null, days: n}];
+    }
+  });
+
+  dash.calc('bands', {
+    title: 'Overnight HRV and sleeping heart rate with your normal range',
+    description: 'For each day: the value, and the median ± 1.4826 × MAD of the previous 60 days (at least 14 values), HRV on the log scale.',
+    inputs: ['days'],
+    fn: (days) => {
+      const s = sorted(days);
+      const band = (i, f, floor, log) => {
+        const end = parse(s[i].date), start = d3.utcDay.offset(end, -60);
+        const v = s.slice(0, i).filter((r) => parse(r.date) >= start).map(f).filter((x) => x !== null);
+        if (v.length < 14) return [null, null];
+        const med = d3.median(v), mad = d3.median(v.map((x) => Math.abs(x - med))) * 1.4826, sp = Math.max(mad, floor);
+        return log ? [Math.exp(med - sp), Math.exp(med + sp)] : [med - sp, med + sp];
+      };
+      return s.map((r, i) => {
+        const h = band(i, (x) => num(x.hrv_ln), 0.05, true), b = band(i, shr, 1, false);
+        return {date: r.date, hrv: hrvMs(r), hrv_lo: h[0], hrv_hi: h[1], shr: shr(r), shr_lo: b[0], shr_hi: b[1]};
+      });
+    }
+  });
+
+  dash.calc('latest_week', {
+    title: 'Latest weekly report',
+    description: 'The most recent weekly snapshot: Body Age, calendar age and Pace of Aging.',
+    inputs: ['weeks'],
+    fn: (weeks) => {
+      const s = sorted(weeks), w = s[s.length - 1];
+      if (!w) return [];
+      return [{date: w.date, body_age: num(w.body_age) === null ? null : Math.round(num(w.body_age) * 10) / 10,
+        age: num(w.age), pace: num(w.pace) === null ? null : Math.round(num(w.pace) * 100) / 100}];
+    }
+  });
+
+  dash.calc('journal', {
+    title: 'Habit effects from the latest weekly report',
+    description: 'Average next-morning recovery on days with and without each habit, from the latest weekly report.',
+    inputs: ['weeks'],
+    fn: (weeks) => {
+      const s = sorted(weeks), w = s[s.length - 1];
+      const list = w && Array.isArray(w.journal) ? w.journal : [];
+      return list.map((j) => ({question: String(j.question), diff: Math.round(num(j.diff)),
+        text: `On days with ${j.question}, next-morning recovery averaged ${Math.abs(Math.round(num(j.diff)))} points ${num(j.diff) < 0 ? 'lower' : 'higher'} (${j.yes_n} vs ${j.no_n} days)`}));
+    }
+  });
+
+  // Before any mornings are saved the page is one ghost ring and one line; the rest waits for the first row.
+  dash.onData(() => {
+    const g = dash.data('days');
+    const empty = g.status === 'ok' && !sorted(Array.isArray(g.data) ? g.data : []).length;
+    document.querySelectorAll('#main').forEach((el) => { el.hidden = empty; });
+    document.querySelectorAll('#empty').forEach((el) => { el.hidden = !empty; });
+  });
+
+  function setRange(n) {
+    document.querySelectorAll('.rc-toggle button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.range) === n)));
+    dash.setParams({range: n});
+  }
+  document.querySelectorAll('.rc-toggle button').forEach((b) => b.addEventListener('click', () => setRange(Number(b.dataset.range))));
+  setRange(range());
+
+  // ---------------------------------------------------------------- the latest morning
+  function latest() {
+    const g = dash.data('summary');
+    return g.status === 'ok' && g.data && g.data[0] ? g.data[0] : null;
+  }
+  function illness() {
+    const g = dash.data('days');
+    const s = g.status === 'ok' ? sorted(g.data) : [];
+    const last = s[s.length - 1];
+    return !!(last && Array.isArray(last.flags) && last.flags.indexOf('illness_warning') >= 0);
+  }
+  let ringPlayed = false;
+  dash.draw('hero-ring', (el) => {
+    const r = latest();
+    const score = r ? num(r.last_recovery) : null, colour = r && ZONE[r.last_zone] ? ZONE[r.last_zone] : null;
+    const size = 180, sw = 12, rad = (size - sw) / 2, circ = 2 * Math.PI * rad;
+    el.replaceChildren();
+    const svg = d3.select(el).append('svg').attr('width', size).attr('height', size).attr('viewBox', `0 0 ${size} ${size}`).attr('role', 'img')
+      .attr('aria-label', score === null || !colour ? 'Recovery ring: no score that morning' : `Recovery ${score} of 100, ${r.last_zone} zone`);
+    const g = svg.append('g').attr('transform', `rotate(-90 ${size / 2} ${size / 2})`).attr('fill', 'none').attr('stroke-width', sw);
+    g.append('circle').attr('cx', size / 2).attr('cy', size / 2).attr('r', rad).attr('stroke', colour ? alpha(colour, 0.16) : C.rule);
+    if (score === null || !colour || score <= 0) return;
+    const len = Math.max(0, Math.min(1, score / 100)) * circ;
+    const arc = g.append('circle').attr('cx', size / 2).attr('cy', size / 2).attr('r', rad).attr('stroke', colour).attr('stroke-linecap', 'round')
+      .attr('stroke-dasharray', `${len} ${circ}`);
+    if (!ringPlayed && motion()) {
+      arc.attr('stroke-dasharray', `0 ${circ}`).transition().duration(900).ease(d3.easeCubicOut).attr('stroke-dasharray', `${len} ${circ}`);
+    }
+    ringPlayed = true;
+  });
+  dash.draw('hero-score', (el) => {
+    const r = latest();
+    el.textContent = r && num(r.last_recovery) !== null ? String(num(r.last_recovery)) : '—';
+  });
+  dash.draw('hero-lead', (el) => {
+    const r = latest();
+    const zone = r && ZONE[r.last_zone] && num(r.last_recovery) !== null ? (illness() ? 'red' : r.last_zone) : (r ? 'none' : '');
+    const box = el.parentNode;
+    if (!box) return;
+    box.querySelectorAll('[data-lead]').forEach((s) => { s.hidden = s.dataset.lead !== zone; });
+  });
+  dash.draw('summary-line', (el) => {
+    const r = latest();
+    if (!r || !r.last_date) { el.textContent = 'No mornings saved yet.'; return; }
+    const zone = ZONE[r.last_zone] ? r.last_zone : 'not scored';
+    el.textContent = `Morning of ${fmtLong(parse(r.last_date))}, ${zone}, against a ${r.days}-day average of ${r.recovery === null ? '—' : r.recovery + '%'}`;
+  });
+
+  // ---------------------------------------------------------------- range averages
+  function tile(name, field, unit, better, digits) {
+    dash.draw('t-' + name, (el) => {
+      const g = dash.data('summary');
+      const v = g.status === 'ok' && g.data[0] ? g.data[0][field] : null;
+      el.textContent = v === null || v === undefined ? '—' : d3.format(digits ? '.1f' : 'd')(v);
+    });
+    dash.draw('d-' + name, (el) => {
+      const g = dash.data('summary');
+      const r = g.status === 'ok' && g.data[0] ? g.data[0] : null;
+      el.classList.remove('rc-good', 'rc-bad');
+      if (!r || r[field] === null || r[field + '_prev'] === null || r[field + '_prev'] === undefined) { el.textContent = 'No earlier period yet'; return; }
+      const d = r[field] - r[field + '_prev'];
+      const shown = Math.abs(d) < (digits ? 0.05 : 0.5) ? 0 : d;
+      el.textContent = shown === 0 ? `Same as the ${r.days} days before` : `${shown > 0 ? '+' : '−'}${d3.format(digits ? '.1f' : 'd')(Math.abs(shown))}${unit} vs the ${r.days} days before`;
+      if (better !== 0 && shown !== 0) el.classList.add((shown > 0) === (better > 0) ? 'rc-good' : 'rc-bad');
+    });
+  }
+  tile('recovery', 'recovery', ' pts', 1, false);
+  tile('strain', 'strain', '', 0, true);
+  tile('perf', 'perf', ' pts', 1, false);
+  tile('hrv', 'hrv', ' ms', 1, false);
+  tile('shr', 'shr', ' bpm', -1, true);
+
+  // ---------------------------------------------------------------- chart parts
+  function frame(el, h) {
+    const w = Math.max(240, el.clientWidth || 300);
+    el.replaceChildren();
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img');
+    const tip = d3.select(el).append('div').attr('class', 'rc-tip').style('opacity', 0);
+    return {w, h, svg, tip};
+  }
+  function showTip(f, event, html) {
+    const box = f.svg.node().parentNode.getBoundingClientRect();
+    f.tip.style('opacity', 1).html(html)
+      .style('left', Math.min(box.width - 160, Math.max(0, event.clientX - box.left + 10)) + 'px')
+      .style('top', Math.max(0, event.clientY - box.top - 40) + 'px');
+  }
+  function placeholder(el, g) {
+    if (g.status === 'ok') return false;
+    el.textContent = g.status === 'loading' ? '' : (g.status === 'error' ? 'Failed to load' : '—');
+    return true;
+  }
+  // a bar rounded at its data end only (up or down from the baseline y0)
+  function barPath(x, w, y0, y1, r) {
+    const h = Math.abs(y1 - y0);
+    if (h < 0.5 || w <= 0) return '';
+    const k = Math.min(r, w / 2, h), up = y1 < y0, s = up ? 1 : -1, sweep = up ? 1 : 0;
+    return `M${x},${y0}V${y1 + s * k}A${k},${k} 0 0 ${sweep} ${x + k},${y1}H${x + w - k}A${k},${k} 0 0 ${sweep} ${x + w},${y1 + s * k}V${y0}Z`;
+  }
+  function xBand(rows, w, m) { return d3.scaleBand().domain(rows.map((r) => r.date)).range([m.l, w - m.r]).paddingInner(0.35); }
+  function barGeom(x) { const bw = Math.min(20, x.bandwidth()); return {bw, dx: (x.bandwidth() - bw) / 2}; }   // bars stay <= 24 px
+  // at most three faint horizontal reference lines, labelled at the left; no vertical gridlines
+  function refs(f, y, m, values, fmt) {
+    const g = f.svg.append('g');
+    values.forEach((v) => {
+      g.append('line').attr('x1', m.l).attr('x2', f.w - m.r).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', C.rule).attr('stroke-width', 1);
+      g.append('text').attr('x', m.l - 8).attr('y', y(v)).attr('dy', '0.32em').attr('text-anchor', 'end').text(fmt ? fmt(v) : v);
+    });
+  }
+  function three(ticks) { const k = Math.ceil(ticks.length / 3); return ticks.filter((_, i) => i % k === 0).slice(0, 3); }
+  function baseline(f, y0, m) { f.svg.append('line').attr('x1', m.l).attr('x2', f.w - m.r).attr('y1', y0).attr('y2', y0).attr('stroke', C.rule); }
+  function dateTicks(f, x, rows, m, band) {
+    const n = Math.max(2, Math.min(6, Math.floor((f.w - m.l - m.r) / 90)));
+    const step = Math.max(1, Math.ceil(rows.length / n));
+    const picks = rows.filter((_, i) => (rows.length - 1 - i) % step === 0);
+    const g = f.svg.append('g');
+    picks.forEach((r) => {   // labels near an edge hang inward so none runs past the chart
+      const cx = band ? x(r.date) + x.bandwidth() / 2 : x(parse(r.date));
+      const anchor = cx > f.w - m.r - 24 ? 'end' : cx < m.l + 24 ? 'start' : 'middle';
+      g.append('text').attr('x', anchor === 'end' ? f.w - m.r : anchor === 'start' ? m.l : cx).attr('y', f.h - 4).attr('text-anchor', anchor).text(fmtDay(parse(r.date)));
+    });
+  }
+  function endDot(f, cx, cy, colour) {
+    f.svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 5).attr('fill', colour).attr('stroke', C.night).attr('stroke-width', 3);
+  }
+  function bars(el, rows, opt) {
+    const f = frame(el, 200), m = {l: 30, r: 4, t: 8, b: 24};
+    f.svg.attr('aria-label', opt.label);
+    const x = xBand(rows, f.w, m), y = d3.scaleLinear().domain([0, opt.max]).range([f.h - m.b, m.t]);
+    const {bw, dx} = barGeom(x);
+    refs(f, y, m, opt.refs, opt.refFmt);
+    f.svg.append('g').selectAll('path').data(rows.filter((r) => opt.value(r) !== null)).join('path')
+      .attr('d', (r) => barPath(x(r.date) + dx, bw, y(0), y(Math.min(opt.max, opt.value(r))), 4)).style('fill', (r) => opt.fill(r));
+    if (opt.tick) f.svg.append('g').selectAll('line').data(rows.filter((r) => opt.tick(r) !== null)).join('line')
+      .attr('x1', (r) => x(r.date) + dx - 2).attr('x2', (r) => x(r.date) + dx + bw + 2).attr('y1', (r) => y(opt.tick(r))).attr('y2', (r) => y(opt.tick(r)))
+      .attr('stroke', C.chalk).attr('stroke-width', 2).attr('stroke-linecap', 'round');
+    baseline(f, y(0), m);
+    f.svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.date)).attr('width', x.step()).attr('y', m.t).attr('height', f.h - m.b - m.t).attr('fill', 'transparent')
+      .on('pointermove', (event, r) => showTip(f, event, opt.tip(r))).on('pointerleave', () => f.tip.style('opacity', 0));
+    dateTicks(f, x, rows, m, true);
+  }
+
+  // ---------------------------------------------------------------- charts
+  dash.draw('recovery-chart', (el) => {
+    const g = dash.data('days'); if (placeholder(el, g)) return;
+    const rows = lastN(g.data, range());
+    if (!rows.length) { el.textContent = 'No days yet.'; return; }
+    bars(el, rows, {label: 'Recovery by day, 0 to 100, coloured by zone, with the zone lines at 67 and 34', max: 100, refs: [34, 67], value: (r) => num(r.recovery),
+      fill: (r) => ZONE[r.zone] || C.mist,
+      tip: (r) => `${fmtDay(parse(r.date))}: <b>${num(r.recovery) === null ? 'no score' : num(r.recovery) + '%'}</b> ${ZONE[r.zone] ? r.zone : ''}`});
+  });
+  dash.draw('strain-chart', (el) => {
+    const g = dash.data('days'); if (placeholder(el, g)) return;
+    const rows = lastN(g.data, range());
+    if (!rows.length) { el.textContent = 'No days yet.'; return; }
+    bars(el, rows, {label: 'Daily strain, 0 to 21', max: 21, refs: [7, 14, 21], value: (r) => num(r.strain), fill: () => C.strain,
+      tip: (r) => `${fmtDay(parse(r.date))}: strain <b>${num(r.strain) === null ? '—' : d3.format('.1f')(num(r.strain))}</b>`});
+  });
+  dash.draw('sleep-chart', (el) => {
+    const g = dash.data('days'); if (placeholder(el, g)) return;
+    const rows = lastN(g.data, range());
+    if (!rows.length) { el.textContent = 'No nights yet.'; return; }
+    const hrs = (v) => (num(v) === null ? null : num(v) / 60);
+    bars(el, rows, {label: 'Hours asleep each night with the hours needed marked', max: 11, refs: [4, 8], refFmt: (v) => v + ' h', value: (r) => hrs(r.sleep_min), fill: () => C.sleep,
+      tick: (r) => hrs(r.need_min),
+      tip: (r) => `${fmtDay(parse(r.date))}: <b>${hrs(r.sleep_min) === null ? '—' : d3.format('.1f')(hrs(r.sleep_min)) + ' h'}</b> of ${hrs(r.need_min) === null ? '—' : d3.format('.1f')(hrs(r.need_min)) + ' h'} needed${num(r.perf) === null ? '' : ', ' + Math.round(num(r.perf) * 100) + '%'}`});
+  });
+  dash.draw('stress-chart', (el) => {
+    const g = dash.data('days'); if (placeholder(el, g)) return;
+    const rows = lastN(g.data, range());
+    if (!rows.some((r) => num(r.stress) !== null)) { el.textContent = 'Building your stress baseline (needs about 2 weeks of daytime data).'; return; }
+    const tone = (v) => { const p = Math.round(v * 10) / 10; return STRESS[p < 0.5 ? 0 : p < 1 ? 1 : p < 1.5 ? 2 : p < 2 ? 3 : 4]; };
+    bars(el, rows, {label: 'Daily stress, 0 to 3, with lines at 1 (medium) and 2 (high)', max: 3, refs: [1, 2], value: (r) => num(r.stress), fill: (r) => tone(num(r.stress)),
+      tip: (r) => `${fmtDay(parse(r.date))}: stress <b>${num(r.stress) === null ? '—' : d3.format('.1f')(num(r.stress))}</b>`});
+  });
+
+  function bandLine(el, key, unit, digits, label, colour) {
+    const g = dash.data('bands'); if (placeholder(el, g)) return;
+    const rows = lastN(g.data, range()).filter((r) => r[key] !== null);
+    if (!rows.length) { el.textContent = 'No readings yet.'; return; }
+    const f = frame(el, 200), m = {l: 30, r: 8, t: 10, b: 24};
+    f.svg.attr('aria-label', label);
+    const vals = rows.flatMap((r) => [r[key], r[key + '_lo'], r[key + '_hi']]).filter((v) => v !== null);
+    const y = d3.scaleLinear().domain(d3.extent(vals)).nice(3).range([f.h - m.b, m.t]);
+    const x = d3.scaleUtc().domain(d3.extent(rows, (r) => parse(r.date))).range([m.l, f.w - m.r]);
+    refs(f, y, m, three(y.ticks(4)));
+    const b = rows.filter((r) => r[key + '_lo'] !== null);
+    f.svg.append('path').datum(b).attr('fill', alpha(colour, 0.16))
+      .attr('d', d3.area().curve(d3.curveMonotoneX).x((r) => x(parse(r.date))).y0((r) => y(r[key + '_lo'])).y1((r) => y(r[key + '_hi'])));
+    f.svg.append('path').datum(rows).attr('fill', 'none').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+      .attr('stroke', colour).attr('d', d3.line().curve(d3.curveMonotoneX).x((r) => x(parse(r.date))).y((r) => y(r[key])));
+    const last = rows[rows.length - 1];
+    endDot(f, x(parse(last.date)), y(last[key]), colour);
+    f.svg.append('g').selectAll('circle').data(rows).join('circle').attr('cx', (r) => x(parse(r.date))).attr('cy', (r) => y(r[key])).attr('r', 8).attr('fill', 'transparent')
+      .on('pointermove', (event, r) => showTip(f, event, `${fmtDay(parse(r.date))}: <b>${d3.format(digits)(r[key])} ${unit}</b>${r[key + '_lo'] === null ? '' : `, normal ${d3.format(digits)(r[key + '_lo'])}–${d3.format(digits)(r[key + '_hi'])}`}`))
+      .on('pointerleave', () => f.tip.style('opacity', 0));
+    dateTicks(f, x, rows, m, false);
+  }
+  dash.draw('hrv-chart', (el) => bandLine(el, 'hrv', 'ms', 'd', 'Overnight HRV in milliseconds with your normal range as a band', C.green));
+  dash.draw('shr-chart', (el) => bandLine(el, 'shr', 'bpm', '.1f', 'Sleeping heart rate in beats per minute with your normal range as a band', C.hr));
+
+  dash.draw('load-chart', (el) => {
+    const g = dash.data('days'); if (placeholder(el, g)) return;
+    const rows = lastN(g.data, range()).filter((r) => num(r.ctl) !== null && num(r.atl) !== null);
+    if (!rows.length) { el.textContent = 'No training load yet.'; return; }
+    const f = frame(el, 260), m = {l: 30, r: 8, t: 10, b: 24}, split = 150;
+    f.svg.attr('aria-label', 'Fitness and fatigue lines, with form as bars below');
+    const x = d3.scaleUtc().domain(d3.extent(rows, (r) => parse(r.date))).range([m.l, f.w - m.r]);
+    const y = d3.scaleLinear().domain(d3.extent(rows.flatMap((r) => [num(r.ctl), num(r.atl)]))).nice(5).range([split, m.t]);
+    refs(f, y, m, three(y.ticks(4)));
+    [['ctl', C.strain], ['atl', C.orange]].forEach(([k, c]) => {
+      f.svg.append('path').datum(rows).attr('fill', 'none').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+        .attr('stroke', c).attr('d', d3.line().curve(d3.curveMonotoneX).x((r) => x(parse(r.date))).y((r) => y(num(r[k]))).defined((r) => num(r[k]) !== null));
+      const last = rows[rows.length - 1];
+      endDot(f, x(parse(last.date)), y(num(last[k])), c);
+    });
+    const tsb = (r) => num(r.ctl) - num(r.atl);
+    const ext = d3.max(rows, (r) => Math.abs(tsb(r))) || 1;
+    const yb = d3.scaleLinear().domain([-ext, ext]).range([f.h - m.b - 4, split + 34]);
+    const bw = Math.max(1, Math.min(24, (f.w - m.l - m.r) / rows.length * 0.7));
+    f.svg.append('g').selectAll('path').data(rows).join('path')
+      .attr('d', (r) => barPath(x(parse(r.date)) - bw / 2, bw, yb(0), yb(tsb(r)), 3)).attr('fill', (r) => alpha(tsb(r) >= 0 ? C.strain : C.orange, 0.7));
+    baseline(f, yb(0), m);
+    f.svg.append('text').attr('x', m.l - 8).attr('y', yb(0)).attr('dy', '0.32em').attr('text-anchor', 'end').text('0');
+    f.svg.append('text').attr('x', m.l).attr('y', split + 26).text('Form');
+    f.svg.append('g').selectAll('rect').data(rows).join('rect').attr('x', (r) => x(parse(r.date)) - (f.w - m.l - m.r) / rows.length / 2).attr('width', (f.w - m.l - m.r) / rows.length)
+      .attr('y', m.t).attr('height', f.h - m.b - m.t).attr('fill', 'transparent')
+      .on('pointermove', (event, r) => showTip(f, event, `${fmtDay(parse(r.date))}: fitness <b>${Math.round(num(r.ctl))}</b>, fatigue <b>${Math.round(num(r.atl))}</b>, form <b>${Math.round(tsb(r))}</b>`))
+      .on('pointerleave', () => f.tip.style('opacity', 0));
+    dateTicks(f, x, rows, m, false);
+  });
+
+  // ---------------------------------------------------------------- body age
+  dash.draw('body-age', (el) => {
+    const g = dash.data('latest_week');
+    const r = g.status === 'ok' && g.data[0] ? g.data[0] : null;
+    el.textContent = r && r.body_age !== null ? d3.format('.1f')(r.body_age) : '—';
+  });
+  dash.draw('body-age-vs', (el) => {
+    const g = dash.data('latest_week');
+    const r = g.status === 'ok' && g.data[0] ? g.data[0] : null;
+    el.classList.remove('rc-good', 'rc-bad');
+    if (!r || r.body_age === null || r.age === null) { el.textContent = 'Appears after the first weekly report'; return; }
+    const d = r.body_age - r.age;
+    el.textContent = Math.abs(d) < 0.05 ? 'Same as your calendar age' : `${d3.format('.1f')(Math.abs(d))} years ${d < 0 ? 'younger' : 'older'} than your calendar age of ${d3.format('.1f')(r.age)}`;
+    el.classList.add(d < 0 ? 'rc-good' : 'rc-bad');
+  });
+  dash.draw('pace', (el) => {
+    const g = dash.data('latest_week');
+    const r = g.status === 'ok' && g.data[0] ? g.data[0] : null;
+    el.textContent = r && r.pace !== null ? `${d3.format('.2f')(r.pace)}×` : 'needs 8 weekly reports';
+  });
+  dash.draw('body-age-chart', (el) => {
+    const g = dash.data('weeks'); if (placeholder(el, g)) return;
+    const rows = sorted(g.data).filter((r) => num(r.body_age) !== null && num(r.age) !== null);
+    if (rows.length < 2) { el.textContent = 'The trend appears after two weekly reports.'; return; }
+    const f = frame(el, 150), m = {l: 30, r: 8, t: 12, b: 24};
+    f.svg.attr('aria-label', 'Body Age by week against calendar age');
+    const x = d3.scaleUtc().domain(d3.extent(rows, (r) => parse(r.date))).range([m.l, f.w - m.r]);
+    const vals = rows.flatMap((r) => [num(r.body_age), num(r.age)]);
+    const y = d3.scaleLinear().domain(d3.extent(vals)).nice(3).range([f.h - m.b, m.t]);
+    refs(f, y, m, three(y.ticks(4)));
+    f.svg.append('path').datum(rows).attr('fill', 'none').attr('stroke-dasharray', '2 4').attr('stroke-linecap', 'round').attr('stroke-width', 2).attr('stroke', C.fog)
+      .attr('d', d3.line().x((r) => x(parse(r.date))).y((r) => y(num(r.age))));
+    const last = rows[rows.length - 1];
+    f.svg.append('text').attr('x', f.w - m.r).attr('y', y(num(last.age)) - 8).attr('text-anchor', 'end').text('Calendar age');
+    f.svg.append('path').datum(rows).attr('fill', 'none').attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke', C.chalk)
+      .attr('d', d3.line().curve(d3.curveMonotoneX).x((r) => x(parse(r.date))).y((r) => y(num(r.body_age))));
+    endDot(f, x(parse(last.date)), y(num(last.body_age)), C.chalk);
+    f.svg.append('g').selectAll('circle.rc-hit').data(rows).join('circle').attr('class', 'rc-hit').attr('cx', (r) => x(parse(r.date))).attr('cy', (r) => y(num(r.body_age))).attr('r', 8).attr('fill', 'transparent')
+      .on('pointermove', (event, r) => showTip(f, event, `Week to ${fmtDay(parse(r.date))}: body age <b>${d3.format('.1f')(num(r.body_age))}</b>, calendar age ${d3.format('.1f')(num(r.age))}`))
+      .on('pointerleave', () => f.tip.style('opacity', 0));
+    dateTicks(f, x, rows, m, false);
+  });
+
+  // ---------------------------------------------------------------- habits
+  dash.draw('journal-rows', (el) => {
+    const g = dash.data('journal');
+    el.replaceChildren();
+    const rows = g.status === 'ok' ? g.data : [];
+    if (!rows.length) {
+      const tr = el.insertRow(), td = tr.insertCell();
+      td.colSpan = 3; td.textContent = 'Nothing yet: effects appear once a habit has at least 5 days each way.';
+      return;
+    }
+    rows.forEach((r) => {
+      const tr = el.insertRow();
+      tr.dataset.key = r.question;
+      tr.insertCell().textContent = r.question;
+      tr.insertCell().textContent = r.text;
+      const c = tr.insertCell(); c.textContent = (r.diff > 0 ? '+' : '') + r.diff; c.className = r.diff < 0 ? 'rc-bad' : 'rc-good';
+      const bar = document.createElement('i'), fill = document.createElement('i');
+      bar.className = 'rc-dv';
+      fill.style.background = r.diff < 0 ? C.red : C.green;
+      fill.style.width = Math.min(50, Math.abs(r.diff) / 25 * 50) + '%';
+      fill.style[r.diff < 0 ? 'right' : 'left'] = '50%';
+      bar.appendChild(fill); c.appendChild(bar);
+    });
+  });
+})();
+</script>

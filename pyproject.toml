@@ -1,0 +1,10 @@
+[project]
+name = "recovery-coach"
+version = "0.1.0"
+description = "Whoop-style recovery, strain and sleep scores from Apple Watch data"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

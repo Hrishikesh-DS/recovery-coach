@@ -1,0 +1,6 @@
+{
+  "dash/meta": {"title": "Recovery", "lang": "en"},
+  "dash/params": {"range": 30},
+  "datasets/days": {"title": "Daily scores", "description": "One saved row per morning: recovery, strain, sleep, stress, HRV, heart rate and training load, written by the Recovery Coach skill.", "source": {"kind": "store", "path": "data/days"}},
+  "datasets/weeks": {"title": "Weekly reports", "description": "One saved row per weekly report: Body Age, calendar age, Pace of Aging and habit effects.", "source": {"kind": "store", "path": "data/weeks"}}
+}
