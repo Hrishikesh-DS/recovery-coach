@@ -25,6 +25,7 @@ def full_rows(n=200):
             onset_min=-75, wake_min=405, strain=12.345, trimp=150.06, stress=0.854, still_hr=[65.44, 70.0],
             ctl=100.04, atl=110.06, tsb=-10.02, acwr=1.0525, steps=8123.4, mvpa_min=40.0, vig_min=5.0,
             strength_min=50.6, vo2=49.25 if i % 10 == 0 else None, flags=["hrv_low"] if i == 3 else [],
+            wload=88.06, srpe=315.4,
             journal={"alcohol": i % 2 == 0, "late meal": False} if i < 30 else {}))
     return rows
 
@@ -48,6 +49,7 @@ def test_compact_keeps_engine_fields_for_their_days_at_their_precision(tmp_path)
     assert cols["wtemp"][-1] == 35.6 and cols["perf"][-1] == 0.912 and cols["sleep_min"][-1] == 452
     assert cols["steps"][-1] == 8123 and cols["strain"][-1] == 12.3 and cols["trimp"][-1] == 150.1
     assert cols["ctl"][-1] == 100 and cols["still_hr"][-1] == [65.4, 70]
+    assert len(cols["wload"]) == 29 and cols["wload"][-1] == 88.1 and cols["srpe"][-1] == 315
     assert cols["journal:alcohol"][0] == 0 and len(cols["journal:alcohol"]) == 30   # leading days without answers
     assert cols["flags"] == [["hrv_low"], None, None, None]                       # only the last days are read
     assert doc["settings"]["dob"] == "1996-04-12" and doc["settings"]["questions"] == ["alcohol", "late meal"]

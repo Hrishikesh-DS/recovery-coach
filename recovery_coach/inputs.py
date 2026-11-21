@@ -221,6 +221,15 @@ class DayRow:
     vo2: float | None = None
     flags: list[str] = field(default_factory=list)
     journal: dict[str, bool] = field(default_factory=dict)
+    wload: float | None = None      # workout-only Banister load that day (rest days 0)
+    srpe: float | None = None       # session RPE that day (effort x minutes)
+    azm: float | None = None        # Active Zone Minutes
+    ri_h: float | None = None       # Recovery Index: hours slept after the overnight heart-rate low
+    mono: float | None = None       # monotony of the 7 days ending that day
+    tstrain: float | None = None    # training strain (weekly workout load x monotony)
+    form_pct: float | None = None
+    ramp: float | None = None
+    pi7: float | None = None        # Polarization Index of the 7 days ending that day
 
 
 @dataclass
@@ -638,7 +647,9 @@ _SPECIAL = {"date", "zone", "still_hr", "flags", "journal"}
 ZONES = {"green", "yellow", "red"}
 ROW_DECIMALS = {"hrv_ln": 4, "sleep_hr": 1, "rhr": 1, "resp": 2, "spo2": 1, "wtemp": 2, "sleep_min": 1,
                 "need_min": 1, "perf": 3, "debt_min": 1, "strain": 2, "trimp": 1, "stress": 2, "ctl": 2, "atl": 2,
-                "tsb": 2, "acwr": 3, "steps": 0, "mvpa_min": 1, "vig_min": 1, "strength_min": 1, "vo2": 1}
+                "tsb": 2, "acwr": 3, "steps": 0, "mvpa_min": 1, "vig_min": 1, "strength_min": 1, "vo2": 1,
+                "wload": 1, "srpe": 0, "azm": 0, "ri_h": 2, "mono": 2, "tstrain": 0, "form_pct": 1, "ramp": 1,
+                "pi7": 2}
 ROW_KEYS = [f.name for f in fields(DayRow)]
 
 

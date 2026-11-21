@@ -37,6 +37,7 @@ STATE_FIELDS: dict[str, tuple[int | None, int]] = {
     "onset_min": (0, 180), "wake_min": (0, 180), "strain": (1, 36), "trimp": (1, 29), "stress": (2, 36),
     "still_hr": (1, 15), "ctl": (1, 29), "atl": (1, 29), "acwr": (2, 8), "steps": (0, 180),
     "strength_min": (0, 180), "vo2": (1, 180), "flags": (None, 8),
+    "wload": (1, 29), "srpe": (0, 29),
 }
 JOURNAL_DAYS = 180
 
