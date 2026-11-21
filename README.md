@@ -18,6 +18,8 @@ Built for an Apple Watch Ultra 2 (no Apple Readiness score on that model), but i
 | Stress | 0–3 | Heart rate during still, awake hours against your 14-day baseline, blended with daytime HRV when present. |
 | Health monitor | flags | HRV, sleeping HR, breathing rate, SpO₂ and wrist temperature against your normal; two or more out of range raises a "possible illness or strain" flag. |
 | Body Age and Pace of Aging | years, −1×…3× | openbodyscore healthspan v1.2: sleep duration, sleep regularity, steps + strength, VO₂ max, resting HR (and BMI if available), each converted to years through published mortality curves. |
+| Workouts | per session | Training effect 0–5 and recovery hours (approx, open EPOC model), heart-rate recovery at 1 and 2 minutes from raw heart rate, HRSS, Banister TRIMP, zones, intensity, Active Zone Minutes, session RPE, and how the session compares with your usual. Runs add efficiency and heart-rate drift, VO₂ max from the run (Runalyze / Daniels), a Polar-style running index, mechanics, best efforts and splits. |
+| Training | daily and weekly | Form %, ramp, easy-day cap, monotony and training strain, Polar and Garmin load-ratio bands, intensity split and polarization, HRV status, a training status label (approx), the Oura-style Recovery Index, race predictions, training paces and critical speed. |
 | Journal | associations | Yes/no habits (alcohol, late caffeine, …) compared with next-morning recovery once there are ≥ 5 days each way. |
 
 Each module's docstring documents its formulas, constants and sources.
@@ -39,6 +41,7 @@ The skill itself (the instructions Claude follows) lives in the user's Claude ac
 python3 -m recovery_coach run      --in DIR --out DIR [--date YYYY-MM-DD]   # morning scores + daily card
 python3 -m recovery_coach backfill --in DIR --out DIR [--date YYYY-MM-DD]   # first run: history, calibration, back-test
 python3 -m recovery_coach weekly   --in DIR --out DIR [--date YYYY-MM-DD]   # weekly report + card
+python3 -m recovery_coach workout  --in DIR --out DIR [--date YYYY-MM-DD]   # score new workouts + workout card
 python3 -m recovery_coach import   --export export.zip --out DIR --until YYYY-MM-DD [--days 180] [--nights 90]
                                    # history from an Apple Health export, as the back-fill's input files
 ```
@@ -70,7 +73,8 @@ This project re-implements published methods and ports tables from:
 - **OpenReadiness** (MIT) — missing-signal weight redistribution and limiting-factor caps.
 - **ridgwayb/readiness** — one-directional breathing-rate and temperature deviations.
 - **Open Wearables** (MIT) — sleep-quality components.
-- Research: Edwards 1993, Tanaka 2001, Banister / Morton 1990, Plews 2012–13, Buchheit 2014, Radin 2020, Yin 2017, Windred 2024, Ding 2025, Momma 2022, Kodama 2009, Kaminsky 2022, Jensen 2013.
+- **RunningMate** (documentation) — the open approximation of EPOC, training effect and recovery time; **Runalyze** and **Elevate** (published formulas) — Effective VO₂ max, marathon shape, race prognosis, monotony, HRSS and the running index. Formulas are re-implemented, no code copied.
+- Research: Edwards 1993, Tanaka 2001, Banister 1991, Foster 1998/2001, Daniels & Gilbert 1979, Cole 1999, Treff 2019, Uth 2004, Banister / Morton 1990, Plews 2012–13, Buchheit 2014, Radin 2020, Yin 2017, Windred 2024, Ding 2025, Momma 2022, Kodama 2009, Kaminsky 2022, Jensen 2013.
 
 ## License
 
