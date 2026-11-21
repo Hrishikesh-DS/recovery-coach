@@ -152,3 +152,17 @@ def test_workout_ring_marks_recovery_time_approx():
     from recovery_coach.card import workout_card
     d = json.loads((Path(__file__).parent / "fixtures" / "card_workout.json").read_text())
     assert "to recover, approx" in workout_card(d)
+
+
+def test_workout_check_counts_recovery_from_the_real_now(tmp_path):
+    # found on real data: the newest sample is ~3 min after the end, so "% recovered" always read 0
+    from recovery_coach.cli import main as cli_main
+    from recovery_coach.effect import recovered_pct
+    end = START + timedelta(minutes=50)
+    d = folder(tmp_path, [(START, end, "running")], [run_stats(START, 50)], hr_trace(START, 50), run_series(START, 50))
+    out = tmp_path / "out"
+    later = end + timedelta(hours=6)
+    assert cli_main(["workout", "--in", str(d), "--out", str(out), "--date", "2026-11-21", "--now", later.isoformat()]) == 0
+    res = json.loads((out / "result.json").read_text())
+    rec_h = res["workouts"][0]["effect"]["rec_h"]
+    assert res["card"]["context"]["recovered_pct"] == recovered_pct(rec_h, 6.0) > 0

@@ -408,10 +408,11 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
             "state_next": next_state(inp.state, out_rows, workouts=wlog)}
 
 
-def run_workouts(inp: Inputs, today: date | None = None) -> dict:
+def run_workouts(inp: Inputs, today: date | None = None, now: datetime | None = None) -> dict:
     """The `workout` command: score the workouts in the inputs that aren't in the log yet (or are provisional),
     apply effort answers, and return {"workouts", "updates", "card", "state_next"}; card = the latest scored workout
-    with {"context": {"recovery_today", "recovered_pct"}}."""
+    with {"context": {"recovery_today", "recovered_pct"}}. now = the current time for "% recovered" (default: the
+    newest sample, which is only minutes after the end)."""
     s = inp.state.settings
     rows = inp.state.rows
     starts = [w.start for w in inp.workouts or []]
@@ -422,7 +423,7 @@ def run_workouts(inp: Inputs, today: date | None = None) -> dict:
     card = None
     if docs:
         card = dict(max(docs, key=lambda d: d["start"]))
-        now = session.newest_time(inp)
+        now = now or session.newest_time(inp)
         rec_h = card["effect"]["rec_h"]
         since = (now - datetime.fromisoformat(card["end"])).total_seconds() / 3600.0 if now else 0.0
         today_row = next((r for r in rows if r.date == t.isoformat()), None)

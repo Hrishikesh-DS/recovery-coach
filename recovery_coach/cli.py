@@ -75,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--in", dest="inp", required=True, type=Path, help="folder with the input files")
         p.add_argument("--out", required=True, type=Path, help="folder for the outputs (created if missing)")
         p.add_argument("--date", help="YYYY-MM-DD (see the defaults above)")
+        if name == "workout":
+            p.add_argument("--now", help="the current time, ISO 8601 with its offset (for %% recovered)")
     p = sub.add_parser("import", help=IMPORT_HELP, description=IMPORT_HELP)
     p.add_argument("--export", required=True, type=Path, help="export.zip, or the export.xml inside it")
     p.add_argument("--out", required=True, type=Path, help="folder for the input files (created if missing)")
@@ -99,7 +101,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{result['card']['date']}: recovery {rec['score'] if rec['score'] is not None else '-'}"
                   f" ({rec['zone'] or rec['reason_missing']}); wrote result.json, card.html")
         elif args.command == "workout":
-            result = run_workouts(inp, as_of)
+            from .inputs import parse_time
+            now = parse_time(args.now, "--now", None) if args.now else None
+            result = run_workouts(inp, as_of, now)
             files = {"result.json": _json(result)}
             if result["card"]:
                 files["workout.html"] = workout_card(result["card"])
