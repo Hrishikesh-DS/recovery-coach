@@ -31,7 +31,7 @@ from datetime import date
 from pathlib import Path
 
 from .backfill import backfill
-from .card import backtest_card, daily_card, weekly_card
+from .card import backtest_card, daily_card, weekly_card, workout_card
 from .export import import_export, summary_lines
 from .inputs import REQUIRED, InputError, load_inputs
 from .pipeline import run_day, run_workouts
@@ -100,8 +100,11 @@ def main(argv: list[str] | None = None) -> int:
                   f" ({rec['zone'] or rec['reason_missing']}); wrote result.json, card.html")
         elif args.command == "workout":
             result = run_workouts(inp, as_of)
-            _write(args.out, {"result.json": _json(result)})
-            print(f"{len(result['workouts'])} workout(s) scored; wrote result.json")
+            files = {"result.json": _json(result)}
+            if result["card"]:
+                files["workout.html"] = workout_card(result["card"])
+            _write(args.out, files)
+            print(f"{len(result['workouts'])} workout(s) scored; wrote " + ", ".join(files))
         elif args.command == "backfill":
             result = backfill(inp, as_of)
             _write(args.out, {"result.json": _json(result), "backtest.html": backtest_card(result["backtest"])})

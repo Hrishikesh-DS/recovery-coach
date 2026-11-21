@@ -479,3 +479,68 @@ def test_backtest_card():
 def test_backtest_card_empty():
     check_host_rules(backtest_card([]))
     check_host_rules(backtest_card([{"date": "bad"}, None]))
+
+
+# ---------- workout card and training blocks ----------
+
+from recovery_coach.card import workout_card  # noqa: E402
+
+WORKOUT = json.loads((Path(__file__).parent / "fixtures" / "card_workout.json").read_text())
+
+
+def test_workout_card_size_limit():
+    assert len(workout_card(WORKOUT).encode()) < 14_000
+
+
+def test_workout_card_prints_every_number():
+    html = workout_card(WORKOUT)
+    for text in ("3.7", "mostly threshold", "38 h", "17", "34", "26", "14.1", "57", "357", "6:47", "0.948", "6.6",
+                 "32.5", "41.8", "6:47", "8.1", "734", "approx"):
+        assert text in html, text
+
+
+def test_workout_card_nulls_render_dash_with_reason():
+    bare = {"id": "x", "kind": "traditionalStrengthTraining", "start": "2026-11-20T07:09:00-06:00",
+            "end": "2026-11-20T07:57:00-06:00", "minutes": 48, "hr": {}, "load": {}, "effect": {},
+            "recovery": {"reason": "heart rate too sparse"}, "run": None, "notes": ["no heart-rate readings"]}
+    html = workout_card(bare)
+    assert "—" in html and "Heart rate too sparse" in html and "No heart-rate readings" in html
+
+
+def test_workout_card_host_rules():
+    html = workout_card(WORKOUT)
+    assert "<script" not in html and "gradient" not in html and "xmlns" not in html
+    assert "font-weight:600" not in html and "font-weight:700" not in html
+
+
+def test_daily_card_workout_line():
+    d = json.loads((Path(__file__).parent / "fixtures" / "card_daily.json").read_text())
+    d["strain"]["workouts"] = [{"kind": "running", "start": "2026-11-20T08:23:00-06:00", "minutes": 51,
+                                "strain": 14.1, "id": "2026-11-20T08:23-0600", "te": 3.7, "rec_h": 37.7,
+                                "hrr60": 17.0, "benefit": "Threshold"}]
+    d["training"] = {"form_pct": -8.3, "ramp": 2.1, "easy_strain": 9.4, "monotony": 1.62, "mono_flag": "warn",
+                     "tstrain": 1450, "srpe_ratio": 1.12, "polar_band": "productive", "garmin_band": "optimal",
+                     "split7": [120, 40, 8], "split28": [500, 120, 20], "pi7": 2.05, "pi28": 1.9, "focus_short": [],
+                     "target_week": [600, 980], "run_tol_km": 23.0, "status": "productive",
+                     "hrv_status": "balanced", "recovery_index": {"hours": 6.4, "late_nadir": False,
+                                                                  "late_workout": False}}
+    html = daily_card(d)
+    assert "TE 3.7" in html and "38 h" in html and "HRR 17" in html
+    assert "1.62" in html and "Productive" in html and "Garmin: optimal" in html and "6.4 h" in html
+    assert len(html.encode()) < 14_000
+
+
+def test_weekly_card_training_section():
+    w = json.loads((Path(__file__).parent / "fixtures" / "card_weekly.json").read_text())
+    w["training"] = {"week_wload": 320.0, "monotony": 1.4, "tstrain": 448, "split": [120.0, 48.0, 12.0],
+                     "pi": 2.12, "focus_short": ["anaerobic"], "status": "productive",
+                     "race": {"shape": 41.2, "marathon_shape": 38, "vdot": 41.2,
+                              "predictions": {"5k": 1500, "10k": 3120, "half": 6930, "marathon": 15100},
+                              "riegel": {"5k": 1560, "10k": 3250},
+                              "paces": {"easy": 400, "marathon": 340, "threshold": 320, "interval": 295,
+                                        "repetition": 275}, "cs": 3.45, "d_prime": 180},
+                     "uth_vo2": 43.6}
+    html = weekly_card(w)
+    for text in ("25:00", "52:00", "1:55:30", "4:11:40", "41.2", "2.12", "6:40", "anaerobic", "43.6"):
+        assert text in html, text
+    assert len(html.encode()) < 24_000

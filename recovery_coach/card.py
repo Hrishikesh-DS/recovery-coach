@@ -557,8 +557,12 @@ def _workouts(st: dict) -> str:
     for w in shown:
         s = _f(w.get("strain"))
         meter = f'<i class="mt"><i style="width:{_clamp(s / 21) * 100:.0f}%"></i></i>' if s is not None else ""
+        fx = ""
+        if _f(w.get("te")) is not None:
+            fx = (f'<div class="x">TE {_r(w.get("te"), 1)}, {_r(w.get("rec_h"))} h to recover'
+                  + (f', HRR {_r(w.get("hrr60"))}' if _f(w.get("hrr60")) is not None else "") + "</div>")
         rows.append(f'<div class="wo"><div class="el" style="flex:1">{_e(_clip(_workout_name(str(w.get("kind") or "workout")), 24))}'
-                    f'<div class="m">{_clock(w.get("start"))}, {_unit(w.get("minutes"), " min")}</div></div>{meter}'
+                    f'<div class="m">{_clock(w.get("start"))}, {_unit(w.get("minutes"), " min")}</div>{fx}</div>{meter}'
                     + (f'<b class="v">{_r(s, 1)}</b>' if s is not None else '<span class="s">No HR</span>') + "</div>")
     if hidden:
         rows.append(f'<div class="wo m">+{hidden} more with lower strain</div>')
@@ -686,7 +690,32 @@ def daily_card(result: dict) -> str:
             + top + '<div class="hd">' + _hero(rec, flags) + "<div>" + _flags_banner(flags) + _contributors(rec)
             + '</div></div><div class="cols">' + _small_dials(st, sl) + _sleep(sl) + _workouts(st)
             + _trend(_l(r.get("trend"))) + _signals(_d(r.get("bands"))) + _stress(_d(r.get("stress")))
-            + _load(_d(r.get("load"))) + "</div>" + FOOTER + "</div></div>")
+            + _load(_d(r.get("load"))) + _training(_d(r.get("training"))) + "</div>" + FOOTER + "</div></div>")
+
+
+MONO_WORD = {"warn": "Getting repetitive", "alert": "Too repetitive: vary it"}
+
+
+def _training(tr: dict) -> str:
+    """The morning card's training strip (session.training_card): only when there is a workout log."""
+    if not tr:
+        return ""
+    ri = _d(tr.get("recovery_index"))
+    ri_note = ("Low came late in the night" if ri.get("late_nadir") else
+               "Workout ended near bedtime" if ri.get("late_workout") else "Slept after the overnight low")
+    pb, gb = tr.get("polar_band"), tr.get("garmin_band")
+    stats = (_stat("Form", f'{_sg(tr.get("form_pct"), 1)}%' if _f(tr.get("form_pct")) is not None else DASH,
+                   "Share of fitness")
+             + _stat("Monotony", _r(tr.get("monotony"), 2), MONO_WORD.get(tr.get("mono_flag"), "Varied enough")
+                     if _f(tr.get("monotony")) is not None else "Needs 7 days of workouts")
+             + _stat("Load ratio, Polar", _cap(pb) if pb else DASH, f"Garmin: {gb}" if gb else "")
+             + _stat("Polarization", _r(tr.get("pi7"), 2), "7 days; 2 or more is polarized")
+             + _stat("Easy-day cap", _r(tr.get("easy_strain"), 1), "Strain that keeps form level")
+             + _stat("Status", _cap(tr.get("status")) if tr.get("status") else DASH, "approx")
+             + _stat("Recovery index", f'{_r(ri.get("hours"), 1)} h' if _f(ri.get("hours")) is not None else DASH,
+                     ri_note if ri else "Needs overnight heart rate")
+             + _stat("HRV status", _cap(tr.get("hrv_status")) if tr.get("hrv_status") else DASH, "7 days vs your normal"))
+    return _section("Training", f'<div class="g2">{stats}</div>')
 
 
 # ---------------------------------------------------------------- weekly
@@ -1039,11 +1068,63 @@ def weekly_card(result: dict) -> str:
                       _trend_row("HRV", _l(tr.get("hrv")), "ms", 0, "hrv", HRV_C)
                       + _trend_row("Resting HR", _l(tr.get("rhr")), "bpm", 0, "rhr", HR_C)
                       + _trend_row("VO₂ max", _l(tr.get("vo2")), "ml/kg/min", 1, "vo2", CHALK))
-    return (f'<h2 class="sr-only">{_e(summary)}</h2><style>{CSS}{WEEKLY_CSS}</style><div class="rc"><div class="np">'
+    return (f'<h2 class="sr-only">{_e(summary)}</h2><style>{CSS}{WEEKLY_CSS}{SPLIT_CSS}</style><div class="rc"><div class="np">'
             + header + focus_html + f'<div class="hd sc" style="margin:24px 0 0">{_body_age(r.get("body_age"))}</div>'
             + '<div class="cols">' + _averages(avg, prior, series) + days + _weekly_bars(series) + trends
             + _load_chart(_l(r.get("load"))) + _stress_pattern(series, avg.get("stress"), prior.get("stress"))
-            + _journal(_l(r.get("journal"))) + "</div>" + FOOTER + "</div></div>")
+            + _training_week(_d(r.get("training"))) + _journal(_l(r.get("journal"))) + "</div>" + FOOTER
+            + "</div></div>")
+
+
+SPLIT_COLOURS = (STRAIN, ORANGE, RED)
+SPLIT_CSS = (".zb{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:4px 0 8px;gap:2px}"
+             ".zl{display:grid;gap:4px}.zl>div{min-width:0}"
+             ".zl i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:4px}")
+RACE_NAMES = (("5k", "5 km"), ("10k", "10 km"), ("half", "Half marathon"), ("marathon", "Marathon"))
+PACE_NAMES = (("easy", "Easy"), ("marathon", "Marathon"), ("threshold", "Threshold"), ("interval", "Interval"),
+              ("repetition", "Repetition"))
+
+
+def _training_week(tr: dict) -> str:
+    """The weekly card's training and racing section (weekly.training_section)."""
+    if not tr:
+        return ""
+    split = [_f(x) or 0.0 for x in _l(tr.get("split"))][:3]
+    body = ""
+    if len(split) == 3 and sum(split) > 0:
+        total = sum(split)
+        bar = "".join(f'<i style="flex:{v / total:.3f};background:{c}"></i>'
+                      for v, c in zip(split, SPLIT_COLOURS) if v > 0)
+        legend = "".join(f'<div><div class="x"><i style="background:{c}"></i>{n}</div><div class="n">{_r(v)} min</div>'
+                         f'</div>' for v, c, n in zip(split, SPLIT_COLOURS, ("Easy", "Moderate", "Hard")))
+        body += (f'<div class="zb">{bar}</div><div class="zl" style="grid-template-columns:repeat(3,minmax(0,1fr))">'
+                 f'{legend}</div>')
+    short = ", ".join(_l(tr.get("focus_short")))
+    stats = (_stat("Polarization", _r(tr.get("pi"), 2), "2 or more is polarized")
+             + _stat("Monotony", _r(tr.get("monotony"), 2), "Under 1.5 is varied")
+             + _stat("Status", _cap(tr.get("status")) if tr.get("status") else DASH, "approx")
+             + _stat("Short on", _e(short) if short else "Nothing", "Over 28 days, approx"))
+    body += f'<div class="g2" style="margin-top:16px">{stats}</div>'
+    race = _d(tr.get("race"))
+    preds = _d(race.get("predictions"))
+    if preds:
+        tiles = "".join(f'<div class="tl"><div class="s">{n}</div><div class="v">{_mmss(preds.get(k))}</div></div>'
+                        for k, n in RACE_NAMES)
+        body += (f'<div class="s" style="margin:20px 0 8px">Race predictions from your recent outdoor runs</div>'
+                 f'<div class="g2" style="gap:10px">{tiles}</div>')
+        paces = _d(race.get("paces"))
+        rows = "".join(f'<div class="sb"><span class="s">{n}</span><span class="n">{_mmss(paces.get(k))} /km</span></div>'
+                       for k, n in PACE_NAMES if _f(paces.get(k)) is not None)
+        body += f'<div class="s" style="margin:18px 0 8px">Training paces</div>{rows}'
+        cs = _f(race.get("cs"))
+        extra = (_stat("Running VO₂ max", _r(race.get("vdot"), 1), "From your runs, 30 days")
+                 + _stat("Marathon shape", f'{_r(race.get("marathon_shape"))}%', "Volume and long runs")
+                 + _stat("Critical speed", f'{_mmss(1000 / cs)} /km' if cs else DASH, "approx")
+                 + _stat("Heart-rate VO₂ max", _r(tr.get("uth_vo2"), 1), "Uth formula, a rough check"))
+        body += f'<div class="g2" style="margin-top:16px">{extra}</div>'
+    else:
+        body += '<div class="s" style="margin-top:16px">Race predictions need an outdoor run in the last 30 days</div>'
+    return _section("Training and racing", body)
 
 
 # ---------------------------------------------------------------- back-test (first run)
@@ -1104,3 +1185,204 @@ def backtest_card(backtest: list) -> str:
     return (f'<h2 class="sr-only">{_e(summary)}</h2><style>{CSS}{BACKTEST_CSS}</style><div class="rc"><div class="np">'
             + header + f'<div class="hl" style="margin-top:4px">Your last {n} days, scored</div>' + body + FOOTER
             + "</div></div>")
+
+
+# ---------------------------------------------------------------- workout card (the `workout` command)
+# Heart-rate zones 1-5 as a ramp people know from sports watches: slate, blue, green, orange, red. The 3 minutes
+# after End are drawn in chalk at low alpha: the recovery tail.
+HRZ = ("#5D7286", STRAIN, GREEN, ORANGE, RED)
+TAIL = _a(CHALK, .28)
+RIBBON_BARS = 120
+WORKOUT_CSS = (
+    ".wh{display:flex;justify-content:space-between;align-items:center;gap:16px}"
+    ".rb{position:relative;margin-top:18px}.rb svg{display:block;width:100%;height:84px}"
+    ".rb path{stroke-linecap:butt}"
+    ".ax{display:flex;justify-content:space-between;margin-top:6px}"
+    ".zb{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:14px 0 8px;gap:2px}"
+    ".zl{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}"
+    ".zl>div{min-width:0}.zl i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:4px}"
+    ".dl{position:relative;display:inline-block}.dc{position:absolute;inset:0;display:flex;flex-direction:column;"
+    "align-items:center;justify-content:center;text-align:center}"
+    ".spl{display:grid;grid-template-columns:28px 1fr 64px 56px;gap:6px 8px;align-items:center;font-size:13px}"
+    f".spl i{{display:block;height:6px;border-radius:3px;background:{STRAIN}}}"
+)
+BENEFIT_WORD = {"Recovery": "light, recovery", "Base": "aerobic base", "Tempo": "tempo", "Threshold": "threshold",
+                "VO2 max": "VO₂ max", "Anaerobic": "anaerobic"}
+TE_WORD = ((1.0, "minor effect"), (2.0, "some effect"), (3.0, "maintaining"), (4.0, "improving"),
+           (5.0, "highly improving"), (9.0, "overreaching"))
+
+
+def _mmss(seconds) -> str:
+    s = _f(seconds)
+    if s is None:
+        return DASH
+    s = int(round(s))
+    h, m, sec = s // 3600, s % 3600 // 60, s % 60
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+
+
+def _te_word(te) -> str:
+    v = _f(te)
+    if v is None:
+        return ""
+    return next(word for lim, word in TE_WORD if v < lim)
+
+
+def _zone_of(bpm: float, limits: list) -> int:
+    z = -1
+    for i, lim in enumerate(limits):
+        if bpm >= lim:
+            z = i
+    return z
+
+
+def _ribbon(hr: dict, minutes) -> str:
+    trace = [p for p in _l(hr.get("trace")) if isinstance(p, list) and len(p) == 2 and _f(p[1]) is not None]
+    limits = [x for x in _l(hr.get("limits")) if _f(x) is not None]
+    if len(trace) < 4:
+        return _empty("No heart-rate trace")
+    end_s = (_f(minutes) or 0) * 60
+    n = min(RIBBON_BARS, len(trace))
+    step = len(trace) / n
+    bars = []
+    for i in range(n):
+        chunk = trace[int(i * step):max(int((i + 1) * step), int(i * step) + 1)]
+        bars.append((chunk[0][0], sum(p[1] for p in chunk) / len(chunk)))
+    hi = max(b for _, b in bars)
+    lo = min(b for _, b in bars)
+    lo -= max((hi - lo) * 0.35, 6)   # a floor under the lowest bar, so changes in heart rate read as height
+    span = (hi - lo) or 1.0
+    paths: dict[str, list[str]] = {}
+    for i, (sec, bpm) in enumerate(bars):
+        colour = TAIL if sec >= end_s > 0 else (HRZ[_zone_of(bpm, limits)] if _zone_of(bpm, limits) >= 0 else RULE)
+        y = 84 - (bpm - lo) / span * 80
+        paths.setdefault(colour, []).append(f"M{i + .5:g} {y:.1f}V84")
+    svg = "".join(f'<path d="{"".join(d)}" stroke="{c}" stroke-width=".72"/>' for c, d in paths.items())
+    total = trace[-1][0] or 1
+    end_pct = min(end_s / total * 100, 100)
+    label = f"Heart rate from {_r(min(p[1] for p in trace))} to {_r(max(p[1] for p in trace))} bpm"
+    return (f'<div class="rb"><svg viewBox="0 0 {n} 84" preserveAspectRatio="none" role="img" '
+            f'aria-label="{_e(label)}">{svg}</svg><div class="ax x"><span>Start</span>'
+            f'<span style="margin-left:{max(end_pct - 60, 0):.0f}%">{_r(minutes)} min</span>'
+            f'<span>End + 3 min</span></div></div>')
+
+
+def _zones(hr: dict) -> str:
+    z = [_f(x) or 0.0 for x in _l(hr.get("zones"))][:5]
+    if len(z) < 5 or sum(z) <= 0:
+        return ""
+    total = sum(z)
+    bar = "".join(f'<i style="flex:{v / total:.3f};background:{c}"></i>' for v, c in zip(z, HRZ) if v > 0)
+    lims = _l(hr.get("limits"))
+    legend = "".join(
+        f'<div><div class="x"><i style="background:{c}"></i>Zone {i + 1}</div><div class="n">{_r(v)} min</div>'
+        + (f'<div class="x">{_r(lims[i])}+ bpm</div>' if i < len(lims) else "") + "</div>"
+        for i, (v, c) in enumerate(zip(z, HRZ)))
+    return f'<div class="zb">{bar}</div><div class="zl">{legend}</div>'
+
+
+def _hrr(rec: dict) -> str:
+    if _f(rec.get("hrr60")) is None:
+        why = rec.get("reason") or "not available"
+        apple = (f'<div class="m" style="margin-top:6px">Apple’s Cardio Recovery: {_r(rec.get("apple"))} bpm</div>'
+                 if _f(rec.get("apple")) is not None else "")
+        return _section("Heart-rate recovery", _empty(_cap(why)) + apple)
+    flag = rec.get("flag") == "low"
+    one = _stat("In 1 minute", f'{_r(rec.get("hrr60"))} <small class="s">bpm</small>',
+                '<span class="c2">12 or less: take it easy</span>' if flag else "13 or more is normal")
+    two = _stat("In 2 minutes", f'{_r(rec.get("hrr120"))} <small class="s">bpm</small>', "22 or more is normal")
+    apple = _stat("Apple’s estimate", f'{_r(rec.get("apple"))}', "Predicted, capped at 55") \
+        if _f(rec.get("apple")) is not None else ""
+    hrrc = _stat("Largest drop in the session", f'{_r(rec.get("hrrc"))}', "After a minute above threshold") \
+        if _f(rec.get("hrrc")) is not None else ""
+    return _section("Heart-rate recovery", f'<div class="m" style="margin:-8px 0 12px">From {_r(rec.get("end_hr"))} bpm '
+                    f'at the end</div><div class="g2">{one}{two}{apple}{hrrc}</div>')
+
+
+def _wload(ld: dict) -> str:
+    src = {"you": "your rating", "apple": "Apple’s estimate"}.get(ld.get("effort_src"), "")
+    level = ld.get("level")
+    df, dfat = _f(ld.get("d_fitness")), _f(ld.get("d_fatigue"))
+    stats = (_stat("Strain", _r(ld.get("strain"), 1), "0–21")
+             + _stat("HRSS", _r(ld.get("hrss")), "100 = an hour at threshold")
+             + _stat("Effort", _r(ld.get("effort")), src or "No rating")
+             + _stat("Session RPE", _r(ld.get("srpe")), "Effort × minutes")
+             + _stat("Compared with your usual", _cap(level) if level else DASH,
+                     "Same activity, 90 days" if level else "No history yet")
+             + _stat("Fitness, fatigue", f'{_sg(df, 1)}, {_sg(dfat, 1)}' if df is not None else DASH,
+                     "What this adds")
+             + _stat("Intensity", f'{_r(ld.get("intensity_pct"))}%', "Of the most this length could score")
+             + _stat("Active Zone Minutes", _r(ld.get("azm")), "approx"))
+    return _section("Load", f'<div class="g2">{stats}</div>')
+
+
+def _run(run: dict) -> str:
+    if not run:
+        return ""
+    km = _f(run.get("dist"))
+    dec = _f(run.get("dec"))
+    drift = ("Under 5%: steady aerobic engine" if dec < 5 else "5% or more: heart rate drifted up") if dec is not None \
+        else "Needs 20 steady minutes"
+    stats = (_stat("Pace", f'{_mmss(run.get("pace_s_km"))} <small class="s">/km</small>',
+                   f'{_r(km / 1000, 2) if km else DASH} km')
+             + _stat("Efficiency", _r(run.get("ef"), 3), "Metres a minute per beat")
+             + _stat("Heart-rate drift", f'{_r(dec, 1)}%' if dec is not None else DASH, drift)
+             + _stat("VO₂ max from this run", _r(run.get("evo2"), 1), "Effective, after Daniels")
+             + _stat("Running index", _r(run.get("ri"), 1), "Polar-style")
+             + _stat("Performance condition", _sg(run.get("perf_cond")), "approx, vs your last 28 days")
+             + _stat("Vertical ratio", f'{_r(run.get("vert_ratio"), 1)}%', "Lower is more economical")
+             + _stat("Muscle load", f'{_r(run.get("muscle_kj"))} kJ', "Power × time")
+             + _stat("Running stress", _r(run.get("rtss")), "approx, flat-ground")
+             + _stat("Power stress", _r(run.get("rss")), "approx"))
+    best = _d(run.get("best"))
+    names = (("400m", "400 m"), ("1k", "1 km"), ("mile", "Mile"), ("5k", "5 km"), ("10k", "10 km"), ("half", "Half"))
+    best_html = "".join(f'<div><div class="s">{n}</div><div class="v">{_mmss(best[k])}</div></div>'
+                        for k, n in names if _f(best.get(k)) is not None)
+    best_html = (f'<div class="s" style="margin:18px 0 8px">Best efforts inside this run (approx)</div>'
+                 f'<div class="g2" style="grid-template-columns:repeat(3,minmax(0,1fr))">{best_html}</div>'
+                 if best_html else "")
+    splits = [s for s in _l(run.get("splits")) if isinstance(s, dict)]
+    split_html = ""
+    if splits:
+        paces = [_f(s.get("pace_s_km")) for s in splits if _f(s.get("pace_s_km"))]
+        fast, slow = (min(paces), max(paces)) if paces else (0, 1)
+        rows = "".join(
+            f'<span class="x">{_r(s.get("n"))}</span>'
+            f'<i style="width:{35 + 65 * ((slow - _f(s.get("pace_s_km"))) / ((slow - fast) or 1)):.0f}%"></i>'
+            f'<span class="n r">{_mmss(s.get("pace_s_km"))}</span><span class="x r">{_r(s.get("avg_hr"))} bpm</span>'
+            if _f(s.get("pace_s_km")) else "" for s in splits[:12])
+        split_html = f'<div class="s" style="margin:18px 0 8px">Splits</div><div class="spl">{rows}</div>'
+    return _section("Run", f'<div class="g2">{stats}</div>' + best_html + split_html)
+
+
+def workout_card(result: dict) -> str:
+    """Render one workout (session.py result dict, plus an optional "context") as a chat card."""
+    r = _d(result)
+    hr, ld, ef, rec, run = _d(r.get("hr")), _d(r.get("load")), _d(r.get("effect")), _d(r.get("recovery")), _d(r.get("run"))
+    ctx = _d(r.get("context"))
+    name = _workout_name(str(r.get("kind") or "workout"))
+    km = _f(run.get("dist")) if run else None
+    where = " indoors" if r.get("indoor") else ""
+    top = (f'<div class="sb s"><span>{_e(name)}{where} at {_clock(r.get("start"))}, {_md(r.get("start"))}</span>'
+           f'<span>{_unit(r.get("minutes"), " min")}{f", {_r(km / 1000, 1)} km" if km else ""}</span></div>')
+    te = _f(ef.get("te"))
+    benefit = BENEFIT_WORD.get(ef.get("benefit"), "")
+    an = f', anaerobic {_r(ef.get("te_an"), 1)}' if _f(ef.get("te_an")) is not None else ""
+    hero = (f'<div><div class="hv">{_r(te, 1)}</div><div class="hl" style="margin-top:6px">'
+            f'{_e(_cap(_te_word(te) or "No training effect"))}{", mostly " + _e(benefit) if benefit else ""}</div>'
+            f'<div class="s">Training effect out of 5, approx{an}</div></div>')
+    rec_h = _f(ef.get("rec_h"))
+    pct = _f(ctx.get("recovered_pct"))
+    ring = _ring(96, 8, (pct or 0) / 100, GREEN, f"Recovery time {_r(rec_h)} hours",
+                 f'<div class="v">{_r(rec_h)} h</div><div class="x">to recover</div>') if rec_h is not None else ""
+    notes = [n for n in _l(r.get("notes")) if isinstance(n, str)]
+    notes_html = ("".join(f'<div class="m">{_e(_cap(n))}</div>' for n in notes[:4])) if notes else ""
+    prov = ('<div class="m c2" style="margin-top:8px">Scored before the 2 minutes after End were recorded; '
+            'the next check updates it.</div>' if r.get("provisional") else "")
+    summary = (f"{name} workout card: training effect {_r(te, 1)}, {_r(rec_h)} hours to recover, heart-rate recovery "
+               f"{_r(rec.get('hrr60'))} bpm in a minute, strain {_r(ld.get('strain'), 1)}.")
+    return (f'<h2 class="sr-only">{_e(summary)}</h2><style>{CSS}{DAILY_CSS}{WORKOUT_CSS}</style><div class="rc">'
+            f'<div class="np">{top}<div class="wh" style="margin-top:14px">{hero}{ring}</div>{prov}'
+            + _ribbon(hr, r.get("minutes")) + _zones(hr) + '<div class="cols" style="margin-top:8px">'
+            + _hrr(rec) + _wload(ld) + _run(run) + (_section("Notes", notes_html) if notes_html else "")
+            + "</div>" + FOOTER + "</div></div>")

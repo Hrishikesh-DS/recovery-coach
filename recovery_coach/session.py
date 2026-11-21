@@ -14,7 +14,8 @@ burst- and recovery-based figures empty), its run samples (wk_series.csv) and an
 Result dict (every value may be null):
   id, kind, start, end (ISO), minutes, indoor, provisional
   hr        {avg, max, zones: [min in zones 1-5], split: [low, mid, high min], trace: [[sec from start, bpm]]
-             (15-s means, wider when needed to stay within TRACE_MAX points, to 3 min after the end)}
+             (15-s means, wider when needed to stay within TRACE_MAX points, to 3 min after the end),
+             limits: [bpm where zones 1-5 start]}
   load      {strain (0-21), edwards, banister, hrss, intensity_pct, azm, effort (1-10), effort_src "you"|"apple",
              srpe, level (Polar band vs the same activity, 90 days), d_fitness, d_fatigue, z_typical (vs the last 10
              of the same activity)}
@@ -183,7 +184,8 @@ def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint
     hr_block = {"avg": _r(sum(b for _, b in inside) / len(inside), 0) if inside else None,
                 "max": _r(max(b for _, b in inside), 0) if inside else None,
                 "zones": [round(z, 1) for z in zones], "split": [round(z, 1) for z in hm.split(zones)],
-                "trace": _trace(hr, w.start, w.end + AFTER, TRACE_STEP_S)}
+                "trace": _trace(hr, w.start, w.end + AFTER, TRACE_STEP_S),
+                "limits": [round(f * hrmax) for f in hm.ZONE_LIMITS]}
     effort, src = _effort(wid, st, answers)
     load = {"strain": None, "edwards": None, "banister": None, "hrss": None, "intensity_pct": None, "azm": None,
             "effort": effort, "effort_src": src, "srpe": _r(effort * minutes, 0) if effort else None,

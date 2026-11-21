@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from recovery_coach.card import backtest_card, daily_card, weekly_card  # noqa: E402
+from recovery_coach.card import backtest_card, daily_card, weekly_card, workout_card  # noqa: E402
 from test_card import backtest_days, worst_daily  # noqa: E402  (same directory as this script)
 
 FIX = Path(__file__).parent / "fixtures"
@@ -56,7 +56,8 @@ def variants() -> dict[str, str]:
     return {"daily": daily_card(daily), "daily-red": daily_card(red), "daily-worst": daily_card(worst_daily(daily)),
             "daily-null": daily_card(null_daily),
             "weekly": weekly_card(weekly), "weekly-null": weekly_card(null_weekly),
-            "backtest": backtest_card(backtest_days())}
+            "backtest": backtest_card(backtest_days()),
+            "workout": workout_card(json.loads((FIX / "card_workout.json").read_text()))}
 
 
 def main(out: Path) -> None:
