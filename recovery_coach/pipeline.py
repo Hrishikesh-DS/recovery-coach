@@ -32,7 +32,8 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from . import load
-from .inputs import DayRow, HourStat, HrvReading, InputError, Inputs, Night, Vitals, Workout, row_from_dict, row_to_dict
+from .inputs import (DayRow, HourStat, HrvReading, InputError, Inputs, Night, Vitals, Workout, row_from_dict, row_to_dict,
+                     workout_id)
 from .monitor import health_flags
 from .recovery import FLOORS, recovery_score
 from .sleep import ASLEEP_STAGES, bedtime_tonight, build_nights, naps_between, sleep_debt, sleep_need, sleep_quality
@@ -40,6 +41,8 @@ from .stats import robust_baseline
 from .strain import (DEFAULT_K, GAP_CAP_MIN, LAST_READING_MIN, day_strain, dedupe_workouts, hr_max, strain,
                      strain_target, trimp, workout_strain)
 from .state import as_read_back, next_state
+from . import session
+from .sleep import recovery_index
 from .stress import stress_day
 
 HOUR = timedelta(hours=1)
@@ -300,6 +303,16 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
         seen[d.isoformat()] = as_read_back(by[d.isoformat()])
     y_patch, y_card = patches[y], parts
 
+    # ---- workouts: score the ones not yet scored, then the training figures that read the workout log
+    wlog, docs, updates = list(inp.state.workouts), [], []
+    if inp.wk_stats is not None or inp.wk_hr is not None or inp.efforts:
+        docs, updates, wlog = session.score_new(inp, hrmax, k, sorted(seen.values(), key=lambda r: r.date), t)
+    if wlog:
+        extra = session.day_training(wlog, sorted(seen.values(), key=lambda r: r.date), y)
+        patches[y].update(extra)
+        by[y.isoformat()] = stored(replace(by[y.isoformat()], **extra))
+        seen[y.isoformat()] = as_read_back(by[y.isoformat()])
+
     # ---- last night
     goal = s.sleep_goal_min
     debt = sleep_debt(rows, goal)
@@ -321,10 +334,12 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
     if night is None:
         rec.reason_missing = "no main sleep recorded last night"
     flags = health_flags(values, hist)
+    ri = recovery_index(inp.night_hr, night, inp.workouts) if night is not None and inp.night_hr else None
+    ri_h = round(ri["hours"], 2) if ri and ri["hours"] is not None else None
     today_row = stored(DayRow(date=t.isoformat(), recovery=rec.score, zone=rec.zone, hrv_ln=hrv_ln, sleep_hr=shr,
                               rhr=vitals.rhr, resp=vitals.resp, spo2=vitals.spo2, wtemp=vitals.wtemp,
                               sleep_min=sleep_min, need_min=need, perf=perf, debt_min=debt, onset_min=onset_min,
-                              wake_min=wake_min, flags=flags))
+                              wake_min=wake_min, flags=flags, ri_h=ri_h))
 
     # ---- the log as it stands after this run
     by[t.isoformat()] = today_row
@@ -378,9 +393,41 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
                      "reason_missing": rec.reason_missing},
         "sleep": sleep, "strain": strain_card, "stress": y_card["stress"], "load": y_card["load"], "flags": flags,
         "trend": trend, "bands": bands,
+        "training": session.training_card(wlog, log, y, t, k, y_patch.get("acwr"), ri) if wlog else None,
     }
-    out_rows = [row_to_dict(today_row, TODAY_KEYS)]
+    by_id = {e.id: e for e in wlog}
+    for item in strain_card["workouts"]:
+        e = by_id.get(workout_id(datetime.fromisoformat(item["start"])))
+        if e is not None:
+            item.update(id=e.id, te=e.te, te_an=e.te_an, rec_h=e.rec_h, hrr60=e.hrr60, benefit=e.benefit)
+    out_rows = [row_to_dict(today_row, TODAY_KEYS + (("ri_h",) if ri_h is not None else ()))]
     out_rows += [row_to_dict(by[d.isoformat()], patches[d].keys()) for d in sorted(patches, reverse=True)]
     if inp.journal is not None and inp.journal.date not in patches:
         out_rows.append({"date": inp.journal.date.isoformat(), "journal": dict(inp.journal.answers)})
-    return {"card": card, "rows": out_rows, "settings_patch": {}, "state_next": next_state(inp.state, out_rows)}
+    return {"card": card, "rows": out_rows, "settings_patch": {}, "workouts": docs, "workout_updates": updates,
+            "state_next": next_state(inp.state, out_rows, workouts=wlog)}
+
+
+def run_workouts(inp: Inputs, today: date | None = None) -> dict:
+    """The `workout` command: score the workouts in the inputs that aren't in the log yet (or are provisional),
+    apply effort answers, and return {"workouts", "updates", "card", "state_next"}; card = the latest scored workout
+    with {"context": {"recovery_today", "recovered_pct"}}."""
+    s = inp.state.settings
+    rows = inp.state.rows
+    starts = [w.start for w in inp.workouts or []]
+    t = today or (max(starts).date() if starts else date.fromisoformat(rows[-1].date) if rows else date.today())
+    hrmax = s.hrmax or 208.0 - 0.7 * age_on(s.dob, t)
+    k = s.k or DEFAULT_K
+    docs, updates, log = session.score_new(inp, hrmax, k, rows, t)
+    card = None
+    if docs:
+        card = dict(max(docs, key=lambda d: d["start"]))
+        now = session.newest_time(inp)
+        rec_h = card["effect"]["rec_h"]
+        since = (now - datetime.fromisoformat(card["end"])).total_seconds() / 3600.0 if now else 0.0
+        today_row = next((r for r in rows if r.date == t.isoformat()), None)
+        from .effect import recovered_pct
+        card["context"] = {"recovery_today": today_row.recovery if today_row else None,
+                           "recovered_pct": recovered_pct(rec_h, since) if rec_h is not None else None}
+    return {"workouts": docs, "updates": updates, "card": card,
+            "state_next": next_state(inp.state, [], workouts=log)}

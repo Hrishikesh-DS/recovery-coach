@@ -8,7 +8,8 @@ start date), kind (HealthKit activity type), minutes, indoor, provisional (score
 window was complete: the next run scores it again), edwards (the workout's Edwards TRIMP, the unit CTL uses),
 banister (Banister TRIMP), hrss, te, te_an, rec_h, hrr60, hrr120, ef, dec, evo2 (Effective VO2 max of an outdoor
 run), dist (m), secs (moving seconds), avg_hr, effort (1-10), srpe (effort x minutes), split (minutes low / mid /
-high intensity), best ({distance label: seconds}), power (average running power, W).
+high intensity), best ({distance label: seconds}), power (average running power, W), azm (Active Zone Minutes), benefit (the
+training-effect label).
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from datetime import date, timedelta
 LOG_DAYS = 90
 DECIMALS = {"minutes": 1, "edwards": 1, "banister": 1, "hrss": 1, "te": 1, "te_an": 1, "rec_h": 1, "hrr60": 0,
             "hrr120": 0, "ef": 3, "dec": 2, "evo2": 1, "dist": 0, "secs": 0, "avg_hr": 0, "effort": 1, "srpe": 0,
-            "power": 0}
+            "power": 0, "azm": 0}
 
 
 @dataclass
@@ -48,6 +49,8 @@ class LogEntry:
     split: list[float] = field(default_factory=list)
     best: dict[str, float] = field(default_factory=dict)
     power: float | None = None
+    azm: float | None = None
+    benefit: str | None = None
 
 
 KEYS = [f.name for f in fields(LogEntry)]
@@ -84,13 +87,16 @@ def entry_from_dict(d, file: str, where: str) -> LogEntry:
     if d.get("minutes") is None:
         raise InputError(file, None, f"{where}.minutes is required")
     kw = {k: _num(d.get(k), file, f"{where}.{k}") for k in DECIMALS}
+    benefit = d.get("benefit")
+    if benefit is not None and not isinstance(benefit, str):
+        raise InputError(file, None, f"{where}.benefit must be a string")
     indoor, prov = d.get("indoor"), d.get("provisional", False)
     if indoor is not None and not isinstance(indoor, bool) or not isinstance(prov, bool):
         raise InputError(file, None, f"{where}: indoor and provisional must be true or false")
     split = [_num(x, file, f"{where}.split") for x in d.get("split") or []]
     best = {str(k): _num(v, file, f"{where}.best") for k, v in (d.get("best") or {}).items()}
     return LogEntry(id=d["id"], date=d["date"], kind=d["kind"], indoor=indoor, provisional=prov, split=split,
-                    best=best, **kw)
+                    best=best, benefit=benefit, **kw)
 
 
 def merge_log(log: list[LogEntry], new: list[LogEntry], today: date) -> list[LogEntry]:

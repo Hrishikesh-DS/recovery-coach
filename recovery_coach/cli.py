@@ -6,6 +6,8 @@ run       the morning: scores for wake date --date (default: the date of the new
 backfill  the first run: rows for every day with data up to --date, calibrated hrmax / k / hrv_type, a back-test;
           writes result.json ({"rows", "settings_patch", "backtest", "weeks", "state_next", "state_long_next"},
           see backfill.py) and backtest.html
+workout   the workouts in the inputs not scored yet (and effort answers): result.json ({"workouts", "updates",
+          "card", "state_next"}, see session.py)
 weekly    the weekly report for the 7 days ending --date (default: the latest row), from state.json and the
           optional state_long.json; writes weekly.json ({"card", "week", "state_long_next"}, see weekly.py) and
           weekly.html
@@ -32,13 +34,14 @@ from .backfill import backfill
 from .card import backtest_card, daily_card, weekly_card
 from .export import import_export, summary_lines
 from .inputs import REQUIRED, InputError, load_inputs
-from .pipeline import run_day
+from .pipeline import run_day, run_workouts
 from .weekly import weekly_report
 
 COMMANDS = {
     "run": "morning scores and the daily card",
     "backfill": "first run: past rows, calibration and a back-test",
     "weekly": "weekly report and card",
+    "workout": "score the workouts not scored yet (right after a session)",
 }
 IMPORT_HELP = "history from an Apple Health export into the back-fill's input files"
 
@@ -95,6 +98,10 @@ def main(argv: list[str] | None = None) -> int:
             rec = result["card"]["recovery"]
             print(f"{result['card']['date']}: recovery {rec['score'] if rec['score'] is not None else '-'}"
                   f" ({rec['zone'] or rec['reason_missing']}); wrote result.json, card.html")
+        elif args.command == "workout":
+            result = run_workouts(inp, as_of)
+            _write(args.out, {"result.json": _json(result)})
+            print(f"{len(result['workouts'])} workout(s) scored; wrote result.json")
         elif args.command == "backfill":
             result = backfill(inp, as_of)
             _write(args.out, {"result.json": _json(result), "backtest.html": backtest_card(result["backtest"])})
