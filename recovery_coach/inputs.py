@@ -304,6 +304,7 @@ class State:
     settings: Settings | None                                # None: a long state (settings live in state.json)
     rows: list[DayRow]                                       # sorted by date
     weeks: list[Week] = field(default_factory=list)          # sorted by date
+    workouts: list = field(default_factory=list)             # workout_log.LogEntry, sorted by id
 
 
 @dataclass
@@ -782,16 +783,21 @@ def _canonical(v):
     return v
 
 
-def state_crc(cols, weeks=None) -> int:
-    """The checksum of a state document: zlib.crc32 of the canonical JSON of {"cols": cols} (with "weeks" when the
-    document has them): sorted keys, no spaces, ASCII, whole numbers without ".0"."""
-    payload = {"cols": cols} if weeks is None else {"cols": cols, "weeks": weeks}
+def state_crc(cols, weeks=None, workouts=None) -> int:
+    """The checksum of a state document: zlib.crc32 of the canonical JSON of {"cols": cols} (with "weeks" and
+    "workouts" when the document has them): sorted keys, no spaces, ASCII, whole numbers without ".0". A document
+    without "workouts" checks exactly as before the workout log existed."""
+    payload = {"cols": cols}
+    if weeks is not None:
+        payload["weeks"] = weeks
+    if workouts is not None:
+        payload["workouts"] = workouts
     return zlib.crc32(json.dumps(_canonical(payload), sort_keys=True, separators=(",", ":")).encode("ascii"))
 
 
 def read_state(path: Path, settings_required: bool = True) -> State:
     name = path.name
-    doc = _object(_json(path), name, "state", ["settings", "cols", "rows", "weeks", "crc"])
+    doc = _object(_json(path), name, "state", ["settings", "cols", "rows", "weeks", "workouts", "crc"])
     if "settings" not in doc and settings_required:
         raise InputError(name, None, "settings is required")
     if "cols" in doc and "rows" in doc:
@@ -801,7 +807,7 @@ def read_state(path: Path, settings_required: bool = True) -> State:
             raise InputError(name, None, f"crc must be a whole number, got {doc['crc']!r}")
         if "cols" not in doc:
             raise InputError(name, None, "crc goes with the cols form (leave it out of a rows state)")
-        if doc["crc"] != state_crc(doc["cols"], doc.get("weeks")):
+        if doc["crc"] != state_crc(doc["cols"], doc.get("weeks"), doc.get("workouts")):
             raise InputError(name, None, "checksum mismatch (the state was not copied exactly; copy it again)")
     settings = _settings(doc["settings"], name) if "settings" in doc else None
     if "cols" in doc:
@@ -826,7 +832,13 @@ def read_state(path: Path, settings_required: bool = True) -> State:
         weeks.append(Week(_parse_date(w.get("date"), name, None, f"weeks[{i}].date"),
                           _num(w.get("delta"), name, f"weeks[{i}].delta", (-50, 50)),
                           None if items is None else tuple(items)))
-    return State(settings, sorted(rows, key=lambda r: r.date), sorted(weeks, key=lambda w: w.date))
+    from .workout_log import entry_from_dict
+    log = doc.get("workouts") or []
+    if not isinstance(log, list):
+        raise InputError(name, None, "workouts must be a list")
+    entries = [entry_from_dict(w, name, f"workouts[{i}]") for i, w in enumerate(log)]
+    return State(settings, sorted(rows, key=lambda r: r.date), sorted(weeks, key=lambda w: w.date),
+                 sorted(entries, key=lambda e: e.id))
 
 
 OPTIONAL = {"sleep.csv": ("sleep", read_sleep), "hrv.csv": ("hrv", read_hrv), "hours.csv": ("hours", read_hours),

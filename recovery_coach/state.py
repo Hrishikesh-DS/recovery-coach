@@ -84,9 +84,9 @@ def _column(rows: list[DayRow], days: int, value) -> list | None:
 
 
 def compact_state(settings: Settings | None, rows: list[DayRow], weeks: list[Week] | None,
-                  keep_days: int = LONG_DAYS) -> dict:
+                  keep_days: int = LONG_DAYS, workouts: list | None = None) -> dict:
     """A compact state document for these rows (any order): the last keep_days dates, with settings and weekly
-    snapshots when given (None leaves the key out)."""
+    snapshots when given (None leaves the key out), and the workout log (workout_log.LogEntry) when non-empty."""
     rows = sorted(rows, key=lambda r: r.date)
     if rows:
         lo = (date.fromisoformat(rows[-1].date) - timedelta(days=keep_days - 1)).isoformat()
@@ -110,7 +110,10 @@ def compact_state(settings: Settings | None, rows: list[DayRow], weeks: list[Wee
         snaps = sorted(weeks, key=lambda w: w.date)[-KEEP_WEEKS:]
         doc["weeks"] = [{"date": w.date.isoformat(), "delta": w.delta,
                          **({"items": list(w.items)} if w.items is not None else {})} for w in snaps]
-    doc["crc"] = state_crc(cols, doc.get("weeks"))
+    if workouts:
+        from .workout_log import entry_to_dict
+        doc["workouts"] = [entry_to_dict(e) for e in sorted(workouts, key=lambda e: e.id)]
+    doc["crc"] = state_crc(cols, doc.get("weeks"), doc.get("workouts"))
     return doc
 
 
@@ -127,10 +130,13 @@ def merged_rows(state: State, patches: list[dict]) -> list[DayRow]:
     return [row_from_dict(d, "result", "row") for d in merged]
 
 
-def next_state(state: State, patches: list[dict], settings_patch: dict | None = None) -> dict:
-    """The daily state after a run: patches merged, settings patched, the last DAILY_DAYS days."""
+def next_state(state: State, patches: list[dict], settings_patch: dict | None = None,
+               workouts: list | None = None) -> dict:
+    """The daily state after a run: patches merged, settings patched, the last DAILY_DAYS days, and the workout
+    log (the state's own when workouts is None)."""
     settings = replace(state.settings, **(settings_patch or {}))
-    return compact_state(settings, merged_rows(state, patches), None, DAILY_DAYS)
+    log = state.workouts if workouts is None else workouts
+    return compact_state(settings, merged_rows(state, patches), None, DAILY_DAYS, workouts=log)
 
 
 def long_state(rows: list[DayRow], weeks: list[Week]) -> dict:
