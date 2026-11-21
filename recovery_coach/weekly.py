@@ -25,6 +25,7 @@ from .pipeline import age_on, window
 from .recovery import recovery_score
 from .sleep import LATENCY_MIN
 from .state import long_state, merge_states
+from . import race, running, session, training
 
 WEEK = 7
 PRIOR_DAYS = 28
@@ -124,6 +125,52 @@ def pace_points(weeks: list[Week], current: Week) -> list[float | None]:
     return [slots.get(i) for i in range(max(slots) + 1)]
 
 
+def _race(log, end: date) -> dict:
+    vdot = race.shape(log, end)
+    out = {"shape": None, "marathon_shape": None, "vdot": None, "predictions": None, "riegel": None, "paces": None,
+           "cs": None, "d_prime": None, "approx": ["cs", "d_prime"]}
+    if vdot is None:
+        return out
+    ms = race.marathon_shape(log, end, vdot)
+    out.update(shape=round(vdot, 1), marathon_shape=round(ms), vdot=round(vdot, 1),
+               predictions={k: round(v) for k, v in race.predictions(vdot, ms).items()},
+               paces={k: round(v) for k, v in race.paces(vdot).items()})
+    outdoor = [e for e in log if e.kind == "running" and e.indoor is not True and e.date <= end.isoformat()
+               and e.date >= (end - timedelta(days=89)).isoformat()]
+    bests: dict[str, float] = {}
+    for e in outdoor:
+        for lab, sec in e.best.items():
+            bests[lab] = min(sec, bests.get(lab, sec))
+    if "5k" in bests:
+        out["riegel"] = {"5k": round(bests["5k"]), "10k": round(race.riegel(bests["5k"], 5000, 10000))}
+    meters = dict(running.BEST)
+    cs = race.critical_speed([(sec, meters[lab]) for lab, sec in bests.items() if lab in meters])
+    if cs:
+        out.update(cs=round(cs[0], 3), d_prime=round(cs[1]))
+    return out
+
+
+def training_section(log, rows: list[DayRow], end: date, s) -> dict:
+    """The week's training (workout log, 7 days ending end) and the running race figures (session.py, race.py)."""
+    split = training.split_window(log, end, 7)
+    mono = tstrain = None
+    if session._covers(log, end, 7):
+        mono, tstrain, _ = training.monotony([r.wload for r in session.log_rows(log, end, 7)])
+    last = next((r for r in reversed(rows) if r.date <= end.isoformat() and r.acwr is not None), None)
+    recs = [r.recovery for r in window(rows, end + timedelta(days=1), WEEK) if r.recovery is not None]
+    rest = session._rest([r for r in rows if r.date <= end.isoformat()])
+    return {"week_wload": round(sum(session._day_sum(log, end - timedelta(days=i), "banister") for i in range(7)), 1),
+            "monotony": round(mono, 2) if mono is not None else None,
+            "tstrain": round(tstrain) if tstrain is not None else None,
+            "split": [round(x, 1) for x in split],
+            "pi": round(training.polarization(split), 2) if training.polarization(split) is not None else None,
+            "focus_short": training.focus_shortage(log, end),
+            "status": training.status(last.acwr if last else None, session._vo2_trend(rows, end),
+                                      sum(recs) / len(recs) if recs else None),
+            "race": _race(log, end),
+            "uth_vo2": round(running.uth_vo2(s.hrmax, rest), 1) if s.hrmax else None}
+
+
 def weekly_report(state: State, as_of: date | None = None, vitals: Vitals | None = None,
                   long: State | None = None) -> dict:
     s = state.settings
@@ -171,7 +218,8 @@ def weekly_report(state: State, as_of: date | None = None, vitals: Vitals | None
     card = {"week_start": start.isoformat(), "week_end": end.isoformat(), "averages": _averages(week),
             "prior": _averages(prior), "best_day": _day(best, rows, True), "worst_day": _day(worst, rows, False),
             "series": series, "trends": trends, "load": load_series, "body_age": body, "journal": journal,
-            "focus": focus(rows, ba, s.sleep_goal_min)}
+            "focus": focus(rows, ba, s.sleep_goal_min),
+            "training": training_section(state.workouts, rows, end, s)}
     weeks = [w for w in snapshots if w.date != end] + [snapshot]
     return {"card": card, "week": {"date": end.isoformat(), "delta": delta, "items": list(snapshot.items),
                                    "body_age": body["body_age"], "pace": pace},

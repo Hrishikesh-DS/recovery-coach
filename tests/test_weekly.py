@@ -125,3 +125,42 @@ def test_weekly_merges_long_and_daily_state_daily_wins():
     assert alone["card"]["averages"]["recovery"] == 80
     assert any(m[0] == "sleep_duration" and "25 nights" in m[1]                    # too little data: says so
                for m in alone["card"]["body_age"]["missing"])
+
+
+# ---------- training and race section ----------
+
+from recovery_coach.workout_log import LogEntry  # noqa: E402
+
+
+def wk_log(outdoor=True):
+    out = []
+    for i in range(0, 40, 2):
+        d = day(i)
+        out.append(LogEntry(id=f"{d}T07:00-0600", date=d, kind="running", minutes=45.0, indoor=not outdoor,
+                            banister=80.0, edwards=120.0, evo2=44.0 + (i % 3), secs=2700.0, dist=7500.0,
+                            split=[30.0, 12.0, 3.0], best={"1k": 290.0, "mile": 480.0, "5k": 1560.0},
+                            avg_hr=150.0, power=240.0))
+    return out
+
+
+def test_weekly_training_section_present():
+    out = weekly_report(State(SETTINGS, mk_rows(), [], wk_log()), END)
+    tr = out["card"]["training"]
+    assert set(tr) >= {"week_wload", "monotony", "tstrain", "split", "pi", "focus_short", "status", "race", "uth_vo2"}
+    assert tr["week_wload"] == 320.0 and tr["split"] == [120.0, 48.0, 12.0]
+    race = tr["race"]
+    assert race["vdot"] is not None and set(race["predictions"]) == {"5k", "10k", "half", "marathon"}
+    assert race["predictions"]["5k"] < race["predictions"]["10k"] < race["predictions"]["marathon"]
+    assert set(race["paces"]) == {"easy", "marathon", "threshold", "interval", "repetition"}
+    assert race["riegel"]["10k"] > 1560
+
+
+def test_weekly_race_none_without_outdoor_runs():
+    tr = weekly_report(State(SETTINGS, mk_rows(), [], wk_log(outdoor=False)), END)["card"]["training"]
+    assert tr["race"]["vdot"] is None and tr["race"]["predictions"] is None and tr["race"]["paces"] is None
+
+
+def test_weekly_body_age_unchanged():
+    a = weekly_report(State(SETTINGS, mk_rows(), []), END)["card"]["body_age"]
+    b = weekly_report(State(SETTINGS, mk_rows(), [], wk_log()), END)["card"]["body_age"]
+    assert a == b
