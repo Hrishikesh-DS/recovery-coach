@@ -218,3 +218,70 @@ def test_row_to_dict_rounds_and_merge():
     assert [r["date"] for r in out] == ["2026-11-16", "2026-11-18", "2026-11-19"]
     assert out[1] == {"date": "2026-11-18", "recovery": 57, "strain": 12.3}
     assert rows[0]["strain"] is None   # inputs untouched
+
+
+# ---------- workout inputs (post-workout metrics) ----------
+
+from recovery_coach.inputs import (  # noqa: E402
+    REQUIRED, read_efforts, read_night_hr, read_wk_hr, read_wk_series, read_wk_stats, workout_id,
+)
+
+
+def test_read_wk_stats_full_and_minimal(tmp_path):
+    doc = {"workouts": [
+        {"start": "2026-11-21T08:23:39-06:00", "end": "2026-11-21T09:14:11-06:00", "kind": "running"},
+        {"start": "2026-11-21T08:23-0600", "end": "2026-11-21T09:14-0600", "kind": "running", "indoor": False,
+         "dist": 7516, "elev_up": 40, "elev_down": 38, "temp_c": 12.5, "avg_hr": 151, "max_hr": 176,
+         "avg_speed": 2.6, "avg_power": 230, "stride": 1.0, "vo_cm": 8.9, "gct_ms": 262, "effort": 7,
+         "effort_est": 7, "cardio_recovery": 26,
+         "laps": [{"start": "2026-11-21T08:23-0600", "end": "2026-11-21T08:30-0600", "dist": 1000}]},
+    ]}
+    ws = read_wk_stats(write(tmp_path, "wk_stats.json", json.dumps(doc)))
+    a, b = ws
+    assert a.kind == "running" and a.indoor is None and a.dist is None and a.effort is None and a.laps == []
+    assert b.indoor is False and b.dist == 7516 and b.effort == 7 and b.cardio_recovery == 26
+    assert len(b.laps) == 1 and b.laps[0].dist == 1000
+
+
+def test_effort_out_of_range_names_file(tmp_path):
+    doc = {"workouts": [{"start": "2026-11-21T08:23-0600", "end": "2026-11-21T09:14-0600", "kind": "running",
+                         "effort": 11}]}
+    with pytest.raises(InputError) as e:
+        read_wk_stats(write(tmp_path, "wk_stats.json", json.dumps(doc)))
+    assert str(e.value).startswith("wk_stats.json: workouts[0].effort")
+
+
+def test_read_wk_series_blank_cells(tmp_path):
+    p = write(tmp_path, "wk_series.csv",
+              "time,speed,power,dist\n2026-11-21T08:24:00-0600,2.6,231,120\n2026-11-21T08:24:05-0600,,,\n")
+    pts = read_wk_series(p)
+    assert pts[0].speed == 2.6 and pts[0].power == 231 and pts[0].dist == 120
+    assert pts[1].speed is None and pts[1].power is None and pts[1].dist is None
+
+
+def test_read_wk_hr_and_night_hr(tmp_path):
+    hr = read_wk_hr(write(tmp_path, "wk_hr.csv", "time,bpm\n2026-11-21T08:24:00-0600,141\n"))
+    nh = read_night_hr(write(tmp_path, "night_hr.csv", "time,bpm\n2026-11-21T02:00-0600,52\n"))
+    assert hr[0][1] == 141 and nh[0][1] == 52
+
+
+def test_read_efforts_normalises_keys(tmp_path):
+    p = write(tmp_path, "efforts.json", json.dumps({"answers": {"2026-11-21T08:23:39-06:00": 6}}))
+    assert read_efforts(p) == {"2026-11-21T08:23-0600": 6.0}
+
+
+def test_workout_id_format():
+    assert workout_id(datetime(2026, 11, 21, 8, 23, 39, tzinfo=CST)) == "2026-11-21T08:23-0600"
+    assert workout_id(datetime(2026, 3, 1, 7, 5, tzinfo=timezone(timedelta(hours=5.5)))) == "2026-03-01T07:05+0530"
+
+
+def test_run_inputs_without_new_files_still_load(tmp_path):
+    state(tmp_path)
+    for name, text in (("sleep.csv", "start,end,code\n"), ("hrv.csv", "time,ms,type\n"),
+                       ("hours.csv", "hour_start,avg,min,max,steps\n"), ("minutes.csv", "time,bpm\n"),
+                       ("workouts.csv", "start,end,kind,kcal,avg_hr\n"), ("vitals.json", "{}")):
+        write(tmp_path, name, text)
+    inp = load_inputs(tmp_path, REQUIRED["run"])
+    assert inp.wk_hr is None and inp.wk_series is None and inp.wk_stats is None
+    assert inp.night_hr is None and inp.efforts is None
+    assert REQUIRED["workout"] == ("state.json", "workouts.csv", "wk_stats.json", "wk_hr.csv", "wk_series.csv")

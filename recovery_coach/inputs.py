@@ -16,6 +16,7 @@ vitals.json as {} (or zero bytes). Any other file is optional.
   run       state.json, sleep.csv, hrv.csv, hours.csv, minutes.csv, workouts.csv, vitals.json (journal.json optional)
   backfill  state.json, sleep.csv, hrv.csv, hours.csv, workouts.csv, daily.csv (minutes.csv optional)
   weekly    state.json (state_long.json optional)
+  workout   state.json, workouts.csv, wk_stats.json, wk_hr.csv, wk_series.csv
 For backfill every file covers its whole span instead of the morning's (backfill.py); `import` (export.py) writes
 them all, minutes.csv included, from an Apple Health export.
 
@@ -68,6 +69,22 @@ vitals.json
     the kg range, so it can't be caught here; the courier divides pounds by 2.2046 (likewise F -> C, cm or ft/in -> m).
 journal.json
     {"date": "YYYY-MM-DD", "answers": {question: true|false}}: answers about behaviour on that date.
+Post-workout files (all optional for `run`; `workout` requires workouts.csv, wk_stats.json, wk_hr.csv and
+wk_series.csv). A workout's id is its local start to the minute with its offset, e.g. 2026-11-21T08:23-0600
+(workout_id below); efforts.json keys are normalised to it.
+wk_hr.csv       time,bpm
+    Raw heart-rate samples (25-250 bpm) inside each new workout, from its start to 3 minutes after its end.
+wk_series.csv   time,speed,power,dist
+    Run samples: running speed (0-12 m/s), running power (0-1500 W) and cumulative distance since the run's start
+    (0-300000 m); any cell may be empty.
+wk_stats.json   {"workouts": [{"start", "end", "kind", "indoor", "dist" (m), "elev_up", "elev_down" (m),
+                 "temp_c", "avg_hr", "max_hr", "avg_speed" (m/s), "avg_power" (W), "stride" (m), "vo_cm",
+                 "gct_ms", "effort", "effort_est" (Apple Effort 1-10, rated / estimated), "cardio_recovery"
+                 (Apple's 1-minute recovery, bpm), "laps": [{"start", "end", "dist"}]}]}
+    start, end and kind are required; every other key may be missing or null.
+night_hr.csv    time,bpm
+    Heart rate minute by minute (25-250 bpm) across last night's main sleep (the Recovery Index).
+efforts.json    {"answers": {"<workout start>": 1-10}}: his own effort ratings for workouts Apple has none for.
 daily.csv       date,steps,exercise_min,rhr,resp,vo2,max_hr          (backfill only)
     One line per day of Health daily statistics; every field but date may be empty: steps (>= 0), exercise minutes
     (0-1440), resting HR, respiratory rate, VO2 max reading, highest heart rate of the day (same ranges as above).
@@ -121,6 +138,44 @@ class Workout:
     kind: str
     energy_kcal: float | None = None
     avg_hr: float | None = None
+
+
+@dataclass
+class RunPoint:
+    time: datetime
+    speed: float | None = None   # m/s
+    power: float | None = None   # W
+    dist: float | None = None    # cumulative metres since the run's start
+
+
+@dataclass
+class Lap:
+    start: datetime
+    end: datetime
+    dist: float | None = None
+
+
+@dataclass
+class WorkoutStats:
+    start: datetime
+    end: datetime
+    kind: str
+    indoor: bool | None = None
+    dist: float | None = None
+    elev_up: float | None = None
+    elev_down: float | None = None
+    temp_c: float | None = None
+    avg_hr: float | None = None
+    max_hr: float | None = None
+    avg_speed: float | None = None
+    avg_power: float | None = None
+    stride: float | None = None
+    vo_cm: float | None = None
+    gct_ms: float | None = None
+    effort: float | None = None
+    effort_est: float | None = None
+    cardio_recovery: float | None = None
+    laps: list[Lap] = field(default_factory=list)
 
 
 @dataclass
@@ -263,6 +318,11 @@ class Inputs:
     journal: Journal | None = None
     daily: list[DailyStat] | None = None
     state_long: State | None = None
+    wk_hr: list[tuple[datetime, float]] | None = None
+    wk_series: list[RunPoint] | None = None
+    wk_stats: list[WorkoutStats] | None = None
+    night_hr: list[tuple[datetime, float]] | None = None
+    efforts: dict[str, float] | None = None
 
 
 # ---------------------------------------------------------------- plausible ranges
@@ -278,6 +338,16 @@ DAY_MIN = (0, 1440)
 HOUR_STEPS = (0, 30_000)
 DAY_STEPS = (0, 200_000)
 KCAL = (0, 10_000)
+SPEED = (0, 12)          # m/s
+POWER = (0, 1500)        # W
+DIST = (0, 300_000)      # m
+EFFORT = (1, 10)
+ELEV = (0, 20_000)       # m
+TEMP_C = (-40, 60)
+STRIDE = (0.2, 3.0)      # m
+VO_CM = (1, 30)
+GCT_MS = (50, 1000)
+HRR_BPM = (0, 100)
 
 SLEEP_CODES = {"C": "core", "D": "deep", "R": "rem", "A": "awake", "S": "asleep", "B": "inbed"}
 HRV_TYPES = {"S", "R"}
@@ -424,6 +494,29 @@ def read_daily(path: Path) -> list[DailyStat]:
     return out
 
 
+def read_wk_hr(path: Path) -> list[tuple[datetime, float]]:
+    return read_minutes(path)
+
+
+def read_night_hr(path: Path) -> list[tuple[datetime, float]]:
+    return read_minutes(path)
+
+
+def read_wk_series(path: Path) -> list[RunPoint]:
+    name = path.name
+    return [RunPoint(parse_time(t, name, n), _cell(sp, name, n, "speed", SPEED, True),
+                     _cell(pw, name, n, "power", POWER, True), _cell(d, name, n, "dist", DIST, True))
+            for n, (t, sp, pw, d) in _csv_rows(path, ["time", "speed", "power", "dist"])]
+
+
+def workout_id(start: datetime) -> str:
+    """A workout's id: its local start to the minute with the UTC offset as +-HHMM (2026-11-21T08:23-0600)."""
+    off = start.utcoffset() or timedelta(0)
+    mins = int(off.total_seconds() // 60)
+    sign = "-" if mins < 0 else "+"
+    return f"{start:%Y-%m-%dT%H:%M}{sign}{abs(mins) // 60:02d}{abs(mins) % 60:02d}"
+
+
 # ---------------------------------------------------------------- JSON files
 def _json(path: Path):
     try:
@@ -483,6 +576,59 @@ def read_journal(path: Path) -> Journal:
     if "date" not in doc or "answers" not in doc:
         raise InputError(name, None, "needs both date and answers")
     return Journal(_parse_date(doc["date"], name, None), _answers(doc["answers"], name, "answers"))
+
+
+_STAT_NUMS = {"dist": DIST, "elev_up": ELEV, "elev_down": ELEV, "temp_c": TEMP_C, "avg_hr": HR, "max_hr": HR,
+              "avg_speed": SPEED, "avg_power": POWER, "stride": STRIDE, "vo_cm": VO_CM, "gct_ms": GCT_MS,
+              "effort": EFFORT, "effort_est": EFFORT, "cardio_recovery": HRR_BPM}
+
+
+def _time(v, file: str, where: str) -> datetime:
+    if not isinstance(v, str):
+        raise InputError(file, None, f"{where} must be a timestamp string")
+    try:
+        return parse_time(v, file, None)
+    except InputError as e:
+        raise InputError(file, None, f"{where}: {e.message}") from None
+
+
+def read_wk_stats(path: Path) -> list[WorkoutStats]:
+    name = path.name
+    doc = _object(_json(path) if path.stat().st_size else {"workouts": []}, name, "wk_stats", ["workouts"])
+    items = doc.get("workouts") or []
+    if not isinstance(items, list):
+        raise InputError(name, None, "workouts must be a list")
+    out = []
+    for i, w in enumerate(items):
+        where = f"workouts[{i}]"
+        w = _object(w, name, where, ["start", "end", "kind", "indoor", "laps", *_STAT_NUMS])
+        if "start" not in w or "end" not in w or not w.get("kind"):
+            raise InputError(name, None, f"{where} needs start, end and kind")
+        s, e = _time(w["start"], name, f"{where}.start"), _time(w["end"], name, f"{where}.end")
+        if e < s:
+            raise InputError(name, None, f"{where}: end is before start")
+        indoor = w.get("indoor")
+        if indoor is not None and not isinstance(indoor, bool):
+            raise InputError(name, None, f"{where}.indoor must be true, false or null")
+        laps = []
+        for j, lap in enumerate(w.get("laps") or []):
+            lw = f"{where}.laps[{j}]"
+            lap = _object(lap, name, lw, ["start", "end", "dist"])
+            laps.append(Lap(_time(lap.get("start"), name, f"{lw}.start"), _time(lap.get("end"), name, f"{lw}.end"),
+                            _num(lap.get("dist"), name, f"{lw}.dist", DIST)))
+        nums = {k: _num(w.get(k), name, f"{where}.{k}", rng) for k, rng in _STAT_NUMS.items()}
+        out.append(WorkoutStats(s, e, str(w["kind"]), indoor, laps=laps, **nums))
+    return out
+
+
+def read_efforts(path: Path) -> dict[str, float]:
+    name = path.name
+    doc = _object(_json(path) if path.stat().st_size else {}, name, "efforts", ["answers"])
+    answers = doc.get("answers") or {}
+    if not isinstance(answers, dict):
+        raise InputError(name, None, "answers must be a JSON object of workout start: 1-10")
+    return {workout_id(_time(k, name, "answers key")): _num(v, name, f"answers[{k!r}]", EFFORT)
+            for k, v in answers.items()}
 
 
 # ---------------------------------------------------------------- state.json and rows
@@ -686,13 +832,17 @@ def read_state(path: Path, settings_required: bool = True) -> State:
 OPTIONAL = {"sleep.csv": ("sleep", read_sleep), "hrv.csv": ("hrv", read_hrv), "hours.csv": ("hours", read_hours),
             "minutes.csv": ("minutes", read_minutes), "workouts.csv": ("workouts", read_workouts),
             "vitals.json": ("vitals", read_vitals), "journal.json": ("journal", read_journal),
-            "daily.csv": ("daily", read_daily), "state_long.json": ("state_long", read_state_long)}
+            "daily.csv": ("daily", read_daily), "state_long.json": ("state_long", read_state_long),
+            "wk_hr.csv": ("wk_hr", read_wk_hr), "wk_series.csv": ("wk_series", read_wk_series),
+            "wk_stats.json": ("wk_stats", read_wk_stats), "night_hr.csv": ("night_hr", read_night_hr),
+            "efforts.json": ("efforts", read_efforts)}
 
 
 REQUIRED = {
     "run": ("state.json", "sleep.csv", "hrv.csv", "hours.csv", "minutes.csv", "workouts.csv", "vitals.json"),
     "backfill": ("state.json", "sleep.csv", "hrv.csv", "hours.csv", "workouts.csv", "daily.csv"),
     "weekly": ("state.json",),
+    "workout": ("state.json", "workouts.csv", "wk_stats.json", "wk_hr.csv", "wk_series.csv"),
 }
 
 
