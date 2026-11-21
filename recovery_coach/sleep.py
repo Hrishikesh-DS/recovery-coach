@@ -228,3 +228,35 @@ def bedtime_tonight(recent: list[Night], need_min: float) -> datetime:
     latest = nights[-1]
     tomorrow = _midnight(latest.wake_date + timedelta(days=1), latest.wake.tzinfo)
     return tomorrow + timedelta(minutes=usual_wake - need_min - LATENCY_MIN)
+
+
+# ---------------------------------------------------------------- Recovery Index (Oura)
+RI_MIN_READINGS = 30
+RI_WINDOW = timedelta(minutes=5)
+RI_LATE_WORKOUT = timedelta(hours=3)
+
+
+def recovery_index(night_hr, night, workouts) -> dict:
+    """Oura's Recovery Index (support article "Recovery Index"): how long you slept after your heart rate reached its
+    overnight low; 6 h or more is optimal, and the low ideally comes in the first half of the night. The low is the
+    middle of the lowest 5-minute mean of minute heart rate inside the main sleep (at least 30 readings).
+    late_nadir: the low came after the night's midpoint; late_workout: a workout ended within 3 h before sleep onset
+    (late meals, alcohol and late exercise push the low later)."""
+    inside = sorted((t, b) for t, b in night_hr or [] if night.onset <= t <= night.wake)
+    late_workout = any(night.onset - RI_LATE_WORKOUT <= w.end <= night.onset for w in workouts or [])
+    out = {"hours": None, "nadir": None, "late_nadir": False, "late_workout": late_workout}
+    if len(inside) < RI_MIN_READINGS:
+        return out
+    best = None
+    for t, _ in inside:
+        vals = [b for u, b in inside if t <= u < t + RI_WINDOW]
+        if len(vals) >= 3:
+            m = sum(vals) / len(vals)
+            if best is None or m < best[0]:
+                best = (m, t + RI_WINDOW / 2)
+    if best is None:
+        return out
+    nadir = best[1]
+    out.update(hours=(night.wake - nadir).total_seconds() / 3600.0, nadir=nadir.isoformat(timespec="minutes"),
+               late_nadir=nadir > night.onset + (night.wake - night.onset) / 2)
+    return out

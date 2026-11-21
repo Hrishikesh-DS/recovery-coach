@@ -230,3 +230,49 @@ def test_quality_window_anchored_to_scored_night():
     assert sleep_quality(early[-1], early + late)["consistency_min"] == pytest.approx(expected)
     # scored night absent from recent is still included
     assert sleep_quality(early[-1], early[:-1] + late)["consistency_min"] == pytest.approx(expected)
+
+
+# ---------- Recovery Index (Oura) ----------
+
+from recovery_coach.inputs import Night, Workout  # noqa: E402
+from recovery_coach.sleep import recovery_index  # noqa: E402
+
+
+def _ri_night():
+    tz = timezone(timedelta(hours=-6))
+    onset = datetime(2026, 11, 20, 22, 0, tzinfo=tz)
+    return Night(date(2026, 11, 21), onset, onset + timedelta(hours=8), 470, 2, 60, 100, 300, 0.97), onset
+
+
+def _hr(onset, low_at_h):
+    out = []
+    for m in range(0, 480):
+        t = onset + timedelta(minutes=m)
+        out.append((t, 50 + abs(m / 60 - low_at_h) * 3))
+    return out
+
+
+def test_recovery_index_early_nadir():
+    night, onset = _ri_night()
+    r = recovery_index(_hr(onset, 1.5), night, [])
+    assert r["hours"] >= 6 and r["late_nadir"] is False and r["late_workout"] is False
+
+
+def test_recovery_index_late_nadir_flag():
+    night, onset = _ri_night()
+    r = recovery_index(_hr(onset, 6.0), night, [])
+    assert r["hours"] < 3 and r["late_nadir"] is True
+
+
+def test_recovery_index_late_workout_flag():
+    night, onset = _ri_night()
+    w = Workout(onset - timedelta(hours=3), onset - timedelta(hours=2), "running")
+    assert recovery_index(_hr(onset, 1.5), night, [w])["late_workout"] is True
+    early = Workout(onset - timedelta(hours=6), onset - timedelta(hours=5), "running")
+    assert recovery_index(_hr(onset, 1.5), night, [early])["late_workout"] is False
+
+
+def test_recovery_index_too_few_readings():
+    night, onset = _ri_night()
+    r = recovery_index(_hr(onset, 1.5)[:20], night, [])
+    assert r["hours"] is None and r["nadir"] is None
