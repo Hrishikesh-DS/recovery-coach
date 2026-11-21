@@ -7,8 +7,8 @@ improving, 4-4.9 highly improving, 5 overreaching). This module follows the open
 
 - intensity I = heart-rate reserve fraction, clamped 0-1. Each step dt (minutes, the time to the next reading,
   capped at 1 minute) adds EPOC toward a steady state: g = 0.015 (e^(6.5 I) - 1), tau = 10 + 50 I^3 minutes,
-  ss = g tau, EPOC = ss + (EPOC - ss) e^(-dt / tau). With dense readings (median gap <= 15 s) a gap over 10 s is a
-  pause and counts I = 0 after its first 5 s.
+  ss = g tau, EPOC = ss + (EPOC - ss) e^(-dt / tau). With dense readings (median gap <= 15 s) a gap longer than
+  max(30 s, 3 x the median gap) is a pause and counts I = 0 after its first median gap (no cliff as sampling slows).
 - aerobic TE from peak EPOC (ml/kg) against thresholds T = (6, 15, 35, 80, 180) x s, s = clamp(VO2max / 45, 0.75,
   1.4) (s = 1 without VO2 max): linear 0 -> 1 below T1, k + ln(peak / T_k) / ln(T_k+1 / T_k) between, 5.0 at T5.
 - anaerobic TE (dense readings only): A = sum((I - 0.85) / 0.15)^2 dt while I > 0.85; bursts = stretches of >= 15 s
@@ -24,7 +24,8 @@ import math
 from .hr_metrics import Samples, dense
 
 THRESHOLDS = (6.0, 15.0, 35.0, 80.0, 180.0)
-PAUSE_S = 10.0
+PAUSE_MIN_S = 30.0
+PAUSE_FACTOR = 3.0
 BURST_S = 15.0
 BENEFIT_BY_ZONE = ("Recovery", "Base", "Tempo", "Threshold", "VO2 max")
 
@@ -65,6 +66,9 @@ def training_effect(samples: Samples, start, end, rest: float, hrmax: float, vo2
                     zone_min: list[float]) -> dict:
     inside = [x for x in samples if start <= x[0] < end]
     is_dense = dense(inside)
+    gaps = sorted((b[0] - a[0]).total_seconds() for a, b in zip(inside, inside[1:]))
+    typical = gaps[len(gaps) // 2] if gaps else 5.0
+    pause_s = max(PAUSE_MIN_S, PAUSE_FACTOR * typical)
     s = _scale(vo2max)
     epoc = peak = a_load = 0.0
     bursts, burst_s = 0, 0.0
@@ -73,8 +77,8 @@ def training_effect(samples: Samples, start, end, rest: float, hrmax: float, vo2
         gap = min((nxt - t).total_seconds(), 60.0)
         intensity = min(max((bpm - rest) / (hrmax - rest), 0.0), 1.0)
         steps = [(gap, intensity)]
-        if is_dense and gap > PAUSE_S:
-            steps = [(5.0, intensity), (gap - 5.0, 0.0)]
+        if is_dense and gap > pause_s:
+            steps = [(typical, intensity), (gap - typical, 0.0)]
         for sec, inten in steps:
             dt = sec / 60.0
             g = 0.015 * (math.exp(6.5 * inten) - 1.0)

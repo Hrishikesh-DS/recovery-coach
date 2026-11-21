@@ -112,8 +112,9 @@ def compact_state(settings: Settings | None, rows: list[DayRow], weeks: list[Wee
         doc["weeks"] = [{"date": w.date.isoformat(), "delta": w.delta,
                          **({"items": list(w.items)} if w.items is not None else {})} for w in snaps]
     if workouts:
-        from .workout_log import entry_to_dict
-        doc["workouts"] = [entry_to_dict(e) for e in sorted(workouts, key=lambda e: e.id)]
+        from .workout_log import CARD_DAYS, entry_to_dict
+        cut = (max(date.fromisoformat(e.date) for e in workouts) - timedelta(days=CARD_DAYS)).isoformat()
+        doc["workouts"] = [entry_to_dict(e, keep_card=e.date >= cut) for e in sorted(workouts, key=lambda e: e.id)]
     doc["crc"] = state_crc(cols, doc.get("weeks"), doc.get("workouts"))
     return doc
 

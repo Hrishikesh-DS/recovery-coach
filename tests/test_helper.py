@@ -1,5 +1,6 @@
 """The courier helper (python3 -m recovery_coach.helper): every command, on synthetic files."""
 import json
+from datetime import datetime
 import subprocess
 import sys
 from datetime import timezone
@@ -57,8 +58,12 @@ def test_localize_restores_a_whole_dst_morning_from_utc(tmp_path, capsys):
         (d / name).write_text("\n".join(out) + "\n")
     assert "Z" in (d / "hours.csv").read_text()
     assert run(capsys, "localize", d, "America/Chicago")[0] == 0
-    for name in ("sleep.csv", "hrv.csv", "hours.csv", "minutes.csv", "workouts.csv"):
+    for name in ("sleep.csv", "hrv.csv", "hours.csv", "minutes.csv"):
         assert (d / name).read_text() == (original / name).read_text(), name
+    # workouts.csv keeps seconds: the same instants and the same local offsets, written to the second
+    def stamps(p):
+        return [[datetime.fromisoformat(c).isoformat() for c in line.split(",")[:2]] for line in p.read_text().splitlines()[1:]]
+    assert stamps(d / "workouts.csv") == stamps(original / "workouts.csv")
 
 
 def _utc(stamp: str) -> str:
@@ -73,8 +78,8 @@ def test_localize_naive_offset_and_fixed_zones(tmp_path, capsys):
     write(tmp_path, "raw_hr.csv", ["time,bpm", "2026-11-19T12:00:30Z,88"])
     assert run(capsys, "localize", tmp_path, "America/Chicago")[0] == 0
     assert (tmp_path / "workouts.csv").read_text().splitlines()[1:] == [
-        "2026-11-01T01:30-0500,2026-11-01T02:30-0600,running,300,140",
-        "2026-11-19T06:20-0600,2026-11-19T07:00-0600,walking,,"]
+        "2026-11-01T01:30:00-0500,2026-11-01T02:30:00-0600,running,300,140",
+        "2026-11-19T06:20:09-0600,2026-11-19T07:00:00-0600,walking,,"]
     assert (tmp_path / "raw_steps.csv").read_text().splitlines()[1] == "2026-11-19T06:00-0600,2026-11-19T06:01-0600,95"
     assert (tmp_path / "raw_hr.csv").read_text().splitlines()[1] == "2026-11-19T06:00-0600,88"
     india = tmp_path / "india"
@@ -239,7 +244,7 @@ def test_new_workouts_skips_logged_and_dupes(tmp_path, capsys):
     code, out, _ = run(capsys, "new-workouts", str(st), str(d))
     assert code == 0
     assert json.loads(out.splitlines()[0]) == [{"id": "2026-11-21T08:23-0600", "kind": "running",
-                                                "from": "2026-11-21T08:23-0600", "to": "2026-11-21T09:17-0600"}]
+                                                "from": "2026-11-21T08:23:00-0600", "to": "2026-11-21T09:17:00-0600"}]
 
 
 def test_new_workouts_includes_provisional(tmp_path, capsys):
@@ -259,12 +264,12 @@ def test_localize_new_files(tmp_path, capsys):
         "start": "2026-11-21T14:23:39Z", "end": "2026-11-21T15:14:11Z", "kind": "running",
         "laps": [{"start": "2026-11-21T14:23:39Z", "end": "2026-11-21T14:30:00Z", "dist": 1000}]}]}))
     assert run(capsys, "localize", str(d), "America/Chicago")[0] == 0
-    assert (d / "wk_hr.csv").read_text().splitlines()[1].startswith("2026-11-21T08:23-0600")
+    assert (d / "wk_hr.csv").read_text().splitlines()[1].startswith("2026-11-21T08:23:39-0600")
     assert (d / "night_hr.csv").read_text().splitlines()[1].startswith("2026-11-21T02:00-0600")
-    assert (d / "wk_series.csv").read_text().splitlines()[1].startswith("2026-11-21T08:23-0600")
+    assert (d / "wk_series.csv").read_text().splitlines()[1].startswith("2026-11-21T08:23:39-0600")
     w = json.loads((d / "wk_stats.json").read_text())["workouts"][0]
-    assert w["start"] == "2026-11-21T08:23-0600" and w["end"] == "2026-11-21T09:14-0600"
-    assert w["laps"][0]["start"] == "2026-11-21T08:23-0600"
+    assert w["start"] == "2026-11-21T08:23:39-0600" and w["end"] == "2026-11-21T09:14:11-0600"
+    assert w["laps"][0]["start"] == "2026-11-21T08:23:39-0600"
 
 
 def test_emit_workout_doc_under_60kb(tmp_path, capsys):

@@ -51,8 +51,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .inputs import (DAY_STEPS, HR, InputError, _cell, _csv_rows, parse_time, read_hours, read_state, workout_id,
                      read_workouts)
 from .pipeline import activity_from
+from .workout_log import find_logged, needs_rescore
 
 STAMP = "%Y-%m-%dT%H:%M%z"
+SECONDS = "%Y-%m-%dT%H:%M:%S%z"   # workout files keep seconds: 5-s heart rate and exact ends matter there
+EXACT = {"workouts.csv", "wk_hr.csv", "wk_series.csv"}
 TIME_COLUMNS = {"sleep.csv": 2, "hrv.csv": 1, "hours.csv": 1, "minutes.csv": 1, "workouts.csv": 2, "raw_hr.csv": 1,
                 "raw_steps.csv": 2, "wk_hr.csv": 1, "wk_series.csv": 1, "night_hr.csv": 1}
 AFTER_WORKOUT = timedelta(minutes=3)
@@ -93,9 +96,10 @@ def localize(folder: Path, spec: str) -> None:
             if not line.strip():
                 continue
             cells = line.split(",")
+            fmt = SECONDS if name in EXACT else STAMP
             for c in range(min(n, len(cells))):
                 try:
-                    cells[c] = local(parse_time(cells[c], name, i, naive_ok=True), tz).strftime(STAMP)
+                    cells[c] = local(parse_time(cells[c], name, i, naive_ok=True), tz).strftime(fmt)
                 except InputError:
                     pass   # not a timestamp: the engine names the file and line
             out.append(",".join(cells))
@@ -111,7 +115,7 @@ def localize(folder: Path, spec: str) -> None:
                 for key in ("start", "end"):
                     if isinstance(obj.get(key), str):
                         try:
-                            obj[key] = local(parse_time(obj[key], "wk_stats.json", None, naive_ok=True), tz).strftime(STAMP)
+                            obj[key] = local(parse_time(obj[key], "wk_stats.json", None, naive_ok=True), tz).strftime(SECONDS)
                         except InputError:
                             pass
             for w in doc["workouts"]:
@@ -238,13 +242,11 @@ def backfill_weeks(path: Path, dob: str) -> None:
 def new_workouts(state: Path, folder: Path) -> None:
     from .strain import dedupe_workouts
     st = read_state(state)
-    done = {e.id for e in st.workouts if not e.provisional}
     out = []
     for w in dedupe_workouts(read_workouts(folder / "workouts.csv")):
-        wid = workout_id(w.start)
-        if wid not in done:
-            out.append({"id": wid, "kind": w.kind, "from": w.start.strftime(STAMP),
-                        "to": (w.end + AFTER_WORKOUT).strftime(STAMP)})
+        if needs_rescore(find_logged(w.start, w.end, st.workouts), w.kind):
+            out.append({"id": workout_id(w.start), "kind": w.kind, "from": w.start.strftime(SECONDS),
+                        "to": (w.end + AFTER_WORKOUT).strftime(SECONDS)})
     print(json.dumps(out))
     print(f"{len(out)} workout(s) to score")
 

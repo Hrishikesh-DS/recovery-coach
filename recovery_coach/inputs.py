@@ -80,7 +80,8 @@ wk_series.csv   time,speed,power,dist
 wk_stats.json   {"workouts": [{"start", "end", "kind", "indoor", "dist" (m), "elev_up", "elev_down" (m),
                  "temp_c", "avg_hr", "max_hr", "avg_speed" (m/s), "avg_power" (W), "stride" (m), "vo_cm",
                  "gct_ms", "effort", "effort_est" (Apple Effort 1-10, rated / estimated), "cardio_recovery"
-                 (Apple's 1-minute recovery, bpm), "laps": [{"start", "end", "dist"}]}]}
+                 (Apple's 1-minute recovery, bpm), "duration" (moving seconds, pauses excluded),
+                 "laps": [{"start", "end", "dist"}]}]}
     start, end and kind are required; every other key may be missing or null.
 night_hr.csv    time,bpm
     Heart rate minute by minute (25-250 bpm) across last night's main sleep (the Recovery Index).
@@ -175,6 +176,7 @@ class WorkoutStats:
     effort: float | None = None
     effort_est: float | None = None
     cardio_recovery: float | None = None
+    duration: float | None = None
     laps: list[Lap] = field(default_factory=list)
 
 
@@ -358,6 +360,7 @@ STRIDE = (0.2, 3.0)      # m
 VO_CM = (1, 30)
 GCT_MS = (50, 1000)
 HRR_BPM = (0, 100)
+DURATION_S = (0, 172_800)   # moving seconds, up to 48 h
 
 SLEEP_CODES = {"C": "core", "D": "deep", "R": "rem", "A": "awake", "S": "asleep", "B": "inbed"}
 HRV_TYPES = {"S", "R"}
@@ -590,7 +593,7 @@ def read_journal(path: Path) -> Journal:
 
 _STAT_NUMS = {"dist": DIST, "elev_up": ELEV, "elev_down": ELEV, "temp_c": TEMP_C, "avg_hr": HR, "max_hr": HR,
               "avg_speed": SPEED, "avg_power": POWER, "stride": STRIDE, "vo_cm": VO_CM, "gct_ms": GCT_MS,
-              "effort": EFFORT, "effort_est": EFFORT, "cardio_recovery": HRR_BPM}
+              "effort": EFFORT, "effort_est": EFFORT, "cardio_recovery": HRR_BPM, "duration": DURATION_S}
 
 
 def _time(v, file: str, where: str) -> datetime:

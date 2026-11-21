@@ -38,7 +38,7 @@ from . import race, running, training
 from .effect import training_effect
 from .inputs import DayRow, Inputs, RunPoint, Settings, Workout, WorkoutStats, workout_id
 from .strain import dedupe_workouts, strain
-from .workout_log import LogEntry, merge_log
+from .workout_log import LogEntry, find_logged, id_time, merge_log, needs_rescore
 
 TRACE_MAX = 400
 TRACE_STEP_S = 15
@@ -98,9 +98,17 @@ def _load_before(rows: list[DayRow], d: str) -> DayRow | None:
     return prior[-1] if prior else None
 
 
-def _effort(wid: str, st: WorkoutStats | None, answers: dict[str, float]) -> tuple[float | None, str | None]:
-    if wid in answers:
-        return answers[wid], "you"
+def answer_for(start: datetime, answers: dict[str, float]) -> float | None:
+    """His effort answer for the session starting at start, matched by instant (answers may be keyed on any clock)."""
+    near = [(abs((id_time(k) - start).total_seconds()), v) for k, v in answers.items()]
+    near = [x for x in near if x[0] <= MATCH_S]
+    return min(near)[1] if near else None
+
+
+def _effort(start: datetime, st: WorkoutStats | None, answers: dict[str, float]) -> tuple[float | None, str | None]:
+    answer = answer_for(start, answers)
+    if answer is not None:
+        return answer, "you"
     if st is not None and st.effort is not None:
         return st.effort, "you"
     if st is not None and st.effort_est is not None:
@@ -109,7 +117,7 @@ def _effort(wid: str, st: WorkoutStats | None, answers: dict[str, float]) -> tup
 
 
 def _run_block(w, st, hr, series, entry, log, hrmax, rest, notes) -> dict:
-    secs = (w.end - w.start).total_seconds()
+    secs = st.duration if st and st.duration else (w.end - w.start).total_seconds()   # moving time when known
     dist = st.dist if st else None
     inside = [p for p in series if w.start <= p.time <= w.end]
     if dist is None:
@@ -166,7 +174,8 @@ def _run_block(w, st, hr, series, entry, log, hrmax, rest, notes) -> dict:
 
 def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint], settings: Settings,
                   hrmax: float, rest: float, vo2max: float | None, k: float, log: list[LogEntry],
-                  rows: list[DayRow], now: datetime, answers: dict[str, float]) -> tuple[dict, LogEntry]:
+                  rows: list[DayRow], now: datetime, answers: dict[str, float],
+                  next_start: datetime | None = None) -> tuple[dict, LogEntry]:
     wid = workout_id(w.start)
     minutes = (w.end - w.start).total_seconds() / 60.0
     kind = w.kind
@@ -175,7 +184,7 @@ def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint
     lt = LT_FRACTION * hrmax
     notes: list[str] = []
     entry = LogEntry(id=wid, date=w.start.date().isoformat(), kind=kind, minutes=minutes, indoor=indoor,
-                     secs=(w.end - w.start).total_seconds())
+                     secs=st.duration if st and st.duration else (w.end - w.start).total_seconds())
     history = [e for e in log if e.id != wid]
     if not any(e.kind == kind for e in history):
         notes.append("no history yet")
@@ -186,7 +195,7 @@ def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint
                 "zones": [round(z, 1) for z in zones], "split": [round(z, 1) for z in hm.split(zones)],
                 "trace": _trace(hr, w.start, w.end + AFTER, TRACE_STEP_S),
                 "limits": [round(f * hrmax) for f in hm.ZONE_LIMITS]}
-    effort, src = _effort(wid, st, answers)
+    effort, src = _effort(w.start, st, answers)
     load = {"strain": None, "edwards": None, "banister": None, "hrss": None, "intensity_pct": None, "azm": None,
             "effort": effort, "effort_src": src, "srpe": _r(effort * minutes, 0) if effort else None,
             "level": None, "d_fitness": None, "d_fatigue": None, "z_typical": None}
@@ -204,6 +213,9 @@ def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint
         effect.update(te=_r(te["te"]), te_an=_r(te["te_an"]), rec_h=_r(te["rec_h"]), benefit=te["benefit"],
                       reason=te["reason"])
         rec.update(hm.hr_recovery(hr, w.end, hrmax, now))
+        if next_start is not None and (next_start - w.end).total_seconds() < hm.RECOVERY_WAIT_S:
+            rec.update(hrr60=None, hrr120=None, flag=None, provisional=False,
+                       reason="another workout started right after")
         rec["hrrc"] = hm.hrrc(hr, w.start, w.end, lt)
         if effect["reason"]:
             notes.append(effect["reason"])
@@ -245,29 +257,36 @@ def score_new(inp: Inputs, hrmax: float, k: float, rows: list[DayRow], today: da
     answers = inp.efforts or {}
     rest, vo2max = _rest(rows), _vo2(rows)
     now = newest_time(inp) or datetime.combine(today, datetime.min.time())
-    docs, new = [], []
-    for w in dedupe_workouts(inp.workouts or []):
-        wid = workout_id(w.start)
-        if wid in logged and not logged[wid].provisional:
+    docs, new, replaced = [], [], set()
+    sessions = dedupe_workouts(inp.workouts or [])
+    for w in sessions:
+        old = find_logged(w.start, w.end, log)
+        if not needs_rescore(old, w.kind):
             continue
         hr = sorted(x for x in inp.wk_hr or [] if w.start <= x[0] <= w.end + AFTER)
         if not hr:
             hr = sorted(x for x in inp.minutes or [] if w.start <= x[0] <= w.end + AFTER)
-            if wid in logged:
+            if old is not None and old.provisional:
                 continue   # a provisional workout with nothing new to rescore it from
         st = match_stats(w, inp.wk_stats or [])
-        doc, entry = score_workout(w, st, hr, inp.wk_series or [], s, hrmax, rest, vo2max, k, log + new, rows,
-                                   now, answers)
+        history = [e for e in log if e is not old] + new
+        nxt = min((x.start for x in sessions if x.start > w.start), default=None)
+        doc, entry = score_workout(w, st, hr, inp.wk_series or [], s, hrmax, rest, vo2max, k, history, rows,
+                                   now, answers, nxt)
         docs.append(doc)
         new.append(entry)
+        if old is not None and old.id != entry.id:
+            replaced.add(old.id)   # the watch's copy replaces another app's, or the same session on another clock
+    log = [e for e in log if e.id not in replaced]
     updates = []
     fresh = {e.id for e in new}
-    for wid, value in answers.items():
-        if wid in logged and wid not in fresh:
-            e = logged[wid]
+    for key, value in answers.items():
+        e = find_logged(id_time(key), None, log)
+        if e is not None and e.id not in fresh:
             upd = replace(e, effort=value, srpe=round(value * e.minutes))
             new.append(upd)
-            updates.append({"id": wid, "effort": value, "effort_src": "you", "srpe": float(upd.srpe)})
+            fresh.add(e.id)
+            updates.append({"id": e.id, "effort": value, "effort_src": "you", "srpe": float(upd.srpe)})
     return docs, updates, merge_log(log, new, today)
 
 

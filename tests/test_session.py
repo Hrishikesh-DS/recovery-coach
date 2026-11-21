@@ -125,7 +125,7 @@ def test_effort_answer_applied_to_logged_workout(tmp_path):
     res = score(d)
     assert res["workouts"] == []
     assert res["updates"] == [{"id": "2026-11-20T07:09-0600", "effort": 6.0, "effort_src": "you", "srpe": 282.0}]
-    assert res["state_next"]["workouts"][0]["effort"] == 6
+    assert res["state_next"]["workouts"][0]["srpe"] == 282 and "effort" not in res["state_next"]["workouts"][0]
 
 
 def test_trace_point_cap(tmp_path):

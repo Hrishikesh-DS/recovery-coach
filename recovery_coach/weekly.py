@@ -144,7 +144,9 @@ def _race(log, end: date) -> dict:
     if "5k" in bests:
         out["riegel"] = {"5k": round(bests["5k"]), "10k": round(race.riegel(bests["5k"], 5000, 10000))}
     meters = dict(running.BEST)
-    cs = race.critical_speed([(sec, meters[lab]) for lab, sec in bests.items() if lab in meters])
+    thr_speed = 1000.0 / out["paces"]["threshold"]   # m/s; critical speed needs efforts at threshold or faster
+    cs = race.critical_speed([(sec, meters[lab]) for lab, sec in bests.items()
+                              if lab in meters and meters[lab] / sec >= thr_speed])
     if cs:
         out.update(cs=round(cs[0], 3), d_prime=round(cs[1]))
     return out

@@ -559,7 +559,7 @@ def _workouts(st: dict) -> str:
         meter = f'<i class="mt"><i style="width:{_clamp(s / 21) * 100:.0f}%"></i></i>' if s is not None else ""
         fx = ""
         if _f(w.get("te")) is not None:
-            fx = (f'<div class="x">TE {_r(w.get("te"), 1)}, {_r(w.get("rec_h"))} h to recover'
+            fx = (f'<div class="x">TE {_r(w.get("te"), 1)} approx, {_r(w.get("rec_h"))} h to recover'
                   + (f', HRR {_r(w.get("hrr60"))}' if _f(w.get("hrr60")) is not None else "") + "</div>")
         rows.append(f'<div class="wo"><div class="el" style="flex:1">{_e(_clip(_workout_name(str(w.get("kind") or "workout")), 24))}'
                     f'<div class="m">{_clock(w.get("start"))}, {_unit(w.get("minutes"), " min")}</div>{fx}</div>{meter}'
@@ -1374,7 +1374,7 @@ def workout_card(result: dict) -> str:
     rec_h = _f(ef.get("rec_h"))
     pct = _f(ctx.get("recovered_pct"))
     ring = _ring(96, 8, (pct or 0) / 100, GREEN, f"Recovery time {_r(rec_h)} hours",
-                 f'<div class="v">{_r(rec_h)} h</div><div class="x">to recover</div>') if rec_h is not None else ""
+                 f'<div class="v">{_r(rec_h)} h</div><div class="x">to recover, approx</div>') if rec_h is not None else ""
     notes = [n for n in _l(r.get("notes")) if isinstance(n, str)]
     notes_html = ("".join(f'<div class="m">{_e(_cap(n))}</div>' for n in notes[:4])) if notes else ""
     prov = ('<div class="m c2" style="margin-top:8px">Scored before the 2 minutes after End were recorded; '
