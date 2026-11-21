@@ -6,6 +6,8 @@ DST change or carries a foreign offset is measured and dated correctly.
 from __future__ import annotations
 
 import statistics
+from bisect import bisect_right
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
@@ -59,8 +61,14 @@ def _subtract(intervals: list[Interval], holes: list[Interval]) -> list[Interval
     return out
 
 
-def _overlap_min(a: Interval, holes: list[Interval]) -> float:
-    return sum(max(0.0, _minutes(max(a[0], hs), min(a[1], he))) for hs, he in holes)
+def _overlap_min(a: Interval, holes: list[Interval], ends: list[datetime]) -> float:
+    """Minutes of a inside the holes (sorted and disjoint, as _union makes them; ends = their ends)."""
+    total = 0.0
+    for hs, he in holes[bisect_right(ends, a[0]):]:
+        if hs >= a[1]:
+            break
+        total += max(0.0, _minutes(max(a[0], hs), min(a[1], he)))
+    return total
 
 
 @dataclass
@@ -119,6 +127,7 @@ def _main_blocks(blocks: list[_Block]) -> dict[date, _Block]:
 def build_nights(samples: list[SleepSample]) -> list[Night]:
     """One Night per wake date (main sleep), ascending by wake date."""
     blocks, awake = _blocks(samples)
+    awake_ends = [e for _, e in awake]
     inbed = [(s.start, s.end) for s in samples if s.stage == "inbed"]
     nights = []
     for wd, b in sorted(_main_blocks(blocks).items()):
@@ -128,7 +137,7 @@ def build_nights(samples: list[SleepSample]) -> list[Night]:
         stage_min = {"core": 0.0, "deep": 0.0, "rem": 0.0}
         for s in b.samples:
             if s.stage in stage_min:
-                stage_min[s.stage] += _minutes(s.start, s.end) - _overlap_min((s.start, s.end), awake)
+                stage_min[s.stage] += _minutes(s.start, s.end) - _overlap_min((s.start, s.end), awake, awake_ends)
         span = _minutes(onset, wake)
         covering = [i for i in inbed if i[1] > onset and i[0] < wake]
         if covering:
@@ -139,12 +148,20 @@ def build_nights(samples: list[SleepSample]) -> list[Night]:
     return nights
 
 
-def naps_between(samples: list[SleepSample], prev_wake: datetime, onset: datetime) -> float:
-    """Asleep minutes in non-main blocks lying entirely between prev_wake and onset."""
+def nap_finder(samples: list[SleepSample]) -> Callable[[datetime, datetime], float]:
+    """naps_between(samples, ., .) for many windows over the same samples: the blocks are found once."""
     blocks, _ = _blocks(samples)
     main = {id(b) for b in _main_blocks(blocks).values()}
-    return sum(b.asleep_min for b in blocks
-               if id(b) not in main and b.onset >= prev_wake and b.wake <= onset)
+    naps = [b for b in blocks if id(b) not in main]
+
+    def between(prev_wake: datetime, onset: datetime) -> float:
+        return sum(b.asleep_min for b in naps if b.onset >= prev_wake and b.wake <= onset)
+    return between
+
+
+def naps_between(samples: list[SleepSample], prev_wake: datetime, onset: datetime) -> float:
+    """Asleep minutes in non-main blocks lying entirely between prev_wake and onset."""
+    return nap_finder(samples)(prev_wake, onset)
 
 
 def sleep_debt(history: list[DayRow], goal_min: float) -> float:

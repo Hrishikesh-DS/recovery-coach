@@ -1,4 +1,5 @@
 """Command line: python3 -m recovery_coach COMMAND --in DIR --out DIR [--date YYYY-MM-DD]
+(import: python3 -m recovery_coach import --export PATH --out DIR --until YYYY-MM-DD [--days 180] [--nights 90])
 
 run       the morning: scores for wake date --date (default: the date of the newest input timestamp);
           writes result.json ({"card", "rows", "settings_patch", "state_next"}, see pipeline.py) and card.html
@@ -8,6 +9,9 @@ backfill  the first run: rows for every day with data up to --date, calibrated h
 weekly    the weekly report for the 7 days ending --date (default: the latest row), from state.json and the
           optional state_long.json; writes weekly.json ({"card", "week", "state_long_next"}, see weekly.py) and
           weekly.html
+import    history from an Apple Health export (export.zip or export.xml): writes the back-fill's input files
+          (daily, sleep, hrv, hours, minutes, workouts .csv and vitals.json {}) for the span ending --until, and
+          prints a line per file and the RMSSD finding (see export.py). state.json is the caller's.
 
 Two stored documents (state.py), each passed back verbatim: state_next becomes the next run's state.json (60 days),
 state_long_next the next weekly's state_long.json (180 days and the weekly snapshots). "rows" are the per-day
@@ -26,6 +30,7 @@ from pathlib import Path
 
 from .backfill import backfill
 from .card import backtest_card, daily_card, weekly_card
+from .export import import_export, summary_lines
 from .inputs import REQUIRED, InputError, load_inputs
 from .pipeline import run_day
 from .weekly import weekly_report
@@ -35,9 +40,10 @@ COMMANDS = {
     "backfill": "first run: past rows, calibration and a back-test",
     "weekly": "weekly report and card",
 }
+IMPORT_HELP = "history from an Apple Health export into the back-fill's input files"
 
 
-def _date(text: str | None) -> date | None:
+def _date(text: str | None, name: str = "--date") -> date | None:
     if text is None:
         return None
     try:
@@ -45,7 +51,7 @@ def _date(text: str | None) -> date | None:
             raise ValueError
         return date.fromisoformat(text)
     except ValueError:
-        raise InputError("--date", None, f"{text!r} is not a valid date (YYYY-MM-DD)") from None
+        raise InputError(name, None, f"{text!r} is not a valid date (YYYY-MM-DD)") from None
 
 
 def _write(folder: Path, files: dict[str, str]) -> None:
@@ -66,11 +72,21 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--in", dest="inp", required=True, type=Path, help="folder with the input files")
         p.add_argument("--out", required=True, type=Path, help="folder for the outputs (created if missing)")
         p.add_argument("--date", help="YYYY-MM-DD (see the defaults above)")
+    p = sub.add_parser("import", help=IMPORT_HELP, description=IMPORT_HELP)
+    p.add_argument("--export", required=True, type=Path, help="export.zip, or the export.xml inside it")
+    p.add_argument("--out", required=True, type=Path, help="folder for the input files (created if missing)")
+    p.add_argument("--until", required=True, help="YYYY-MM-DD, the last local date (normally yesterday)")
+    p.add_argument("--days", type=int, default=180, help="days of daily, hourly, minute and workout data (180)")
+    p.add_argument("--nights", type=int, default=90, help="nights of sleep and HRV (90)")
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:   # usage errors (argparse already printed the message) and --help
         return e.code if isinstance(e.code, int) else 2
     try:
+        if args.command == "import":
+            summary = import_export(args.export, args.out, _date(args.until, "--until"), args.days, args.nights)
+            print("\n".join(summary_lines(summary)))
+            return 0
         as_of = _date(args.date)
         inp = load_inputs(args.inp, REQUIRED[args.command])
         if args.command == "run":

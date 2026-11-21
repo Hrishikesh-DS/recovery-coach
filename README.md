@@ -39,7 +39,15 @@ The skill itself (the instructions Claude follows) lives in the user's Claude ac
 python3 -m recovery_coach run      --in DIR --out DIR [--date YYYY-MM-DD]   # morning scores + daily card
 python3 -m recovery_coach backfill --in DIR --out DIR [--date YYYY-MM-DD]   # first run: history, calibration, back-test
 python3 -m recovery_coach weekly   --in DIR --out DIR [--date YYYY-MM-DD]   # weekly report + card
+python3 -m recovery_coach import   --export export.zip --out DIR --until YYYY-MM-DD [--days 180] [--nights 90]
+                                   # history from an Apple Health export, as the back-fill's input files
 ```
+
+`import` reads the Health app's export (Export All Health Data) as a stream, with flat memory, and writes the
+back-fill's files for the span ending `--until`: daily statistics, sleep stages, every HRV reading, hourly and minute
+heart rate and workouts, with the rules for overlapping sources (Apple Watch first, steps never double-counted)
+documented in `recovery_coach/export.py`. The back-fill then computes each past day's strain, stress and training load
+exactly as the morning run does.
 
 Input file formats are documented in `recovery_coach/inputs.py`; the result and card schema in `recovery_coach/card.py`. Malformed input exits with code 2 and names the file and line.
 

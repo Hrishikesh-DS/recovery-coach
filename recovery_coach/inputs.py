@@ -14,8 +14,10 @@ The input folder. Each command requires some files (REQUIRED below) and stops wi
 "no data". A file that is present but empty means no data: a CSV with only its header line (or zero bytes), and
 vitals.json as {} (or zero bytes). Any other file is optional.
   run       state.json, sleep.csv, hrv.csv, hours.csv, minutes.csv, workouts.csv, vitals.json (journal.json optional)
-  backfill  state.json, sleep.csv, hrv.csv, hours.csv, workouts.csv, daily.csv
+  backfill  state.json, sleep.csv, hrv.csv, hours.csv, workouts.csv, daily.csv (minutes.csv optional)
   weekly    state.json (state_long.json optional)
+For backfill every file covers its whole span instead of the morning's (backfill.py); `import` (export.py) writes
+them all, minutes.csv included, from an Apple Health export.
 
 state.json      the daily state: the previous run's "state_next", copied verbatim (state.py)
     {"settings": {...}, "cols": {...}, "crc": n}                  compact form, what the engine writes

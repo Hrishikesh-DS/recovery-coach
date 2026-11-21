@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from dataclasses import replace
 from datetime import datetime
 
 from .inputs import HourStat, Workout
@@ -43,7 +44,9 @@ def _overlap_ratio(a: Workout, b: Workout) -> float:
 def dedupe_workouts(ws: list[Workout]) -> list[Workout]:
     """Collapse duplicate logs of one session (overlap / shorter duration > 0.8).
 
-    Preference: has avg_hr, has energy, kind != 'other', longer. Sorted by start.
+    Preference: has avg_hr, has energy, kind != 'other', longer. Sorted by start. A kept "other" takes the kind of
+    a duplicate of about the same length that names one (Strava's "other" copy of a Hevy traditionalStrengthTraining
+    stays strength).
     """
     ranked = sorted(
         ws,
@@ -57,8 +60,14 @@ def dedupe_workouts(ws: list[Workout]) -> list[Workout]:
     )
     kept: list[Workout] = []
     for w in ranked:
-        if all(_overlap_ratio(w, k) <= DUPLICATE_OVERLAP for k in kept):
+        dup = next((i for i, k in enumerate(kept) if _overlap_ratio(w, k) > DUPLICATE_OVERLAP), None)
+        if dup is None:
             kept.append(w)
+        elif (kept[dup].kind == "other" and w.kind != "other"
+              and _duration_min(w) >= DUPLICATE_OVERLAP * _duration_min(kept[dup])):
+            # only a copy of the same session lends its kind: a short walk logged inside a long "other" session
+            # doesn't turn the session into a walk
+            kept[dup] = replace(kept[dup], kind=w.kind)
     return sorted(kept, key=lambda w: w.start)
 
 

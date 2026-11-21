@@ -180,17 +180,30 @@ def activity_from(rows: list[DayRow], t: date) -> date:
 
 
 # ---------------------------------------------------------------- activity: what he did on a day
-def _activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax: float, k: float,
-              sleep_windows: list[tuple[datetime, datetime]]) -> tuple[dict, dict]:
-    """(row patch values for day d, card parts: strain flag, workouts, stress, load). log = the rows before T, with
-    the activity of the days before d already patched in."""
+def worn(hours: list[HourStat], mins: list[tuple[datetime, float]]) -> bool:
+    """Whether the day's hours and minutes hold any heart rate (the watch was worn): its activity is then computed
+    from them."""
+    return any(h.avg_hr is not None for h in hours) or bool(mins)
+
+
+def sleep_windows(nights: list[Night], samples: list) -> list[tuple[datetime, datetime]]:
+    """The intervals stress leaves out: each main sleep, and every asleep sample (naps)."""
+    return [(n.onset, n.wake) for n in nights] + [(x.start, x.end) for x in samples if x.stage in ASLEEP_STAGES]
+
+
+def day_activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax: float, k: float,
+                 asleep: list[tuple[datetime, datetime]]) -> tuple[dict, dict]:
+    """(row patch values for day d, card parts: strain flag, workouts, stress, load; {} unless yesterday). log =
+    the rows before T, with the activity of the days before d already patched in (the back-fill: the rows before d
+    and d's own night). asleep = sleep_windows(). Used by the morning run and by the back-fill, which passes each
+    day's slice of its inputs."""
     s = inp.state.settings
     hours = [h for h in inp.hours or [] if _on(h.start, d)]
     mins = [(t, b) for t, b in inp.minutes or [] if _on(t, d)]
     workouts = inp.workouts or []
     vitals = inp.vitals or Vitals()
-    worn = any(h.avg_hr is not None for h in hours) or bool(mins)
-    if worn:
+    on = worn(hours, mins)
+    if on:
         day_trimp, coverage = trimp(mins, hours, hrmax)
         day_str, flag = day_strain(day_trimp, coverage, k)
         flag = f"{flag}: {coverage:g} h of heart-rate data" if flag else None
@@ -201,13 +214,13 @@ def _activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax: f
     night_hist = [r.hrv_ln for r in window(log, d + timedelta(days=1), HISTORY_DAYS) if r.hrv_ln is not None]
     baseline = [v for r in window(log, d, STILL_BASELINE_DAYS) for v in r.still_hr]
     d_hrv = [(x.time, x.ms) for x in _preferred([x for x in inp.hrv or [] if _on(x.time, d)], s.hrv_type)]
-    st = stress_day(hours, workouts, sleep_windows, d_hrv, baseline, night_hist)
+    st = stress_day(hours, workouts, asleep, d_hrv, baseline, night_hist)
 
     patch = {"strain": day_str, "trimp": day_trimp, "stress": st.score, "still_hr": st.still_readings,
              "ctl": ld["ctl"], "atl": ld["atl"], "tsb": ld["tsb"], "acwr": ld["acwr"],
              "steps": sum(h.steps for h in hours) if hours else None,
-             "vig_min": minutes_at_or_above(mins, VIGOROUS_FRACTION * hrmax) if worn else None,
-             "strength_min": strength_minutes(workouts, d, worn)}
+             "vig_min": minutes_at_or_above(mins, VIGOROUS_FRACTION * hrmax) if on else None,
+             "strength_min": strength_minutes(workouts, d, on)}
     if yesterday and vitals.exercise_min_yesterday is not None:
         patch["mvpa_min"] = vitals.exercise_min_yesterday
     if yesterday and vitals.vo2 is not None:
@@ -271,8 +284,7 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
 
     nights = build_nights(samples)
     night = next((n for n in nights if n.wake_date == t), None)
-    sleep_windows = [(n.onset, n.wake) for n in nights] + [(x.start, x.end) for x in samples
-                                                           if x.stage in ASLEEP_STAGES]
+    windows = sleep_windows(nights, samples)
 
     # ---- activity: yesterday, and the days missed since the last run that the inputs cover, in date order
     first = activity_from(rows, t)
@@ -282,8 +294,8 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
     seen = dict(by)   # what each later day reads: patched days as the next state.json will hold them
     patches: dict[date, dict] = {}
     for d in act_days:
-        patches[d], parts = _activity(inp, sorted(seen.values(), key=lambda r: r.date), d, d == y, hrmax, k,
-                                      sleep_windows)
+        patches[d], parts = day_activity(inp, sorted(seen.values(), key=lambda r: r.date), d, d == y, hrmax, k,
+                                         windows)
         by[d.isoformat()] = stored(replace(by.get(d.isoformat()) or DayRow(date=d.isoformat()), **patches[d]))
         seen[d.isoformat()] = as_read_back(by[d.isoformat()])
     y_patch, y_card = patches[y], parts

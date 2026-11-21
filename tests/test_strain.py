@@ -83,7 +83,9 @@ def test_dedupe_prefers_hr_and_keeps_distinct():
     b = Workout(T0, T0 + timedelta(minutes=30), "other", None, 120.0)
     c = Workout(T0 + timedelta(hours=3), T0 + timedelta(hours=4), "running", 300.0, 150.0)
     out = dedupe_workouts([c, a, b])
-    assert [w.kind for w in out] == ["other", "running"]
+    # the copy with heart rate is kept, under the duplicate's more specific kind (it stays strength)
+    assert [(w.kind, w.avg_hr) for w in out] == [("traditionalStrengthTraining", 120.0), ("running", 150.0)]
+    assert dedupe_workouts([b])[0].kind == "other"
     # barely overlapping (<80%) are both kept
     d = Workout(T0 + timedelta(minutes=25), T0 + timedelta(minutes=55), "other", 50.0, None)
     assert len(dedupe_workouts([a, d])) == 2
@@ -114,3 +116,10 @@ def test_target_bands():
     assert strain_target("green", -25) == (12, 16)
     assert strain_target("red", -25) == (0, 8)
     assert strain_target("yellow", -20) == (10, 14)
+
+
+def test_short_walk_inside_a_long_other_session_does_not_rename_it():
+    long_other = Workout(T0, T0 + timedelta(minutes=90), "other", 600.0, 140.0)
+    walk = Workout(T0 + timedelta(minutes=20), T0 + timedelta(minutes=28), "walking", 40.0, None)
+    kept = dedupe_workouts([long_other, walk])
+    assert [w.kind for w in kept] == ["other"]

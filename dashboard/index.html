@@ -75,6 +75,7 @@
     <h1>Recovery</h1>
   </header>
 
+  <span data-draw="empty-toggle" hidden></span>
   <section class="rc-empty" id="empty" hidden>
     <svg width="180" height="180" viewBox="0 0 180 180" role="img" aria-label="Empty recovery ring: no mornings saved yet"><circle cx="90" cy="90" r="84" fill="none" stroke="#232D38" stroke-width="12"/></svg>
     <p>Your first morning check fills this in. Say 'recovery' to Claude from the phone app.</p>
@@ -265,12 +266,14 @@
   });
 
   // Before any mornings are saved the page is one ghost ring and one line; the rest waits for the first row.
-  dash.onData(() => {
+  function emptyToggle() {
     const g = dash.data('days');
     const empty = g.status === 'ok' && !sorted(Array.isArray(g.data) ? g.data : []).length;
     document.querySelectorAll('#main').forEach((el) => { el.hidden = empty; });
     document.querySelectorAll('#empty').forEach((el) => { el.hidden = !empty; });
-  });
+  }
+  if (typeof dash.onData === 'function') dash.onData(emptyToggle);
+  else dash.draw('empty-toggle', emptyToggle);
 
   function setRange(n) {
     document.querySelectorAll('.rc-toggle button').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.range) === n)));
