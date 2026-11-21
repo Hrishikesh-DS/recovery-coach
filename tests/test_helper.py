@@ -208,3 +208,72 @@ def test_runs_as_a_module(tmp_path):
     p = subprocess.run([sys.executable, "-m", "recovery_coach.helper", "sizes", str(tmp_path)], cwd=ROOT,
                        capture_output=True, text=True)
     assert p.returncode == 0 and p.stdout.splitlines()[-1].endswith("5 B")
+
+
+# ---------- post-workout helpers ----------
+
+def _state_with_log(tmp_path, entries):
+    from recovery_coach.inputs import Settings
+    from datetime import date as _date
+    from recovery_coach.state import compact_state
+    from recovery_coach.workout_log import LogEntry
+    log = [LogEntry(id=i, date=i[:10], kind="running", minutes=45.0, provisional=p) for i, p in entries]
+    doc = compact_state(Settings(dob=_date(1996, 4, 12), sex="male"), [], None, 60, workouts=log)
+    p = tmp_path / "state.json"
+    p.write_text(json.dumps(doc))
+    return p
+
+
+def _workouts(tmp_path, lines):
+    d = tmp_path / "in"
+    d.mkdir()
+    (d / "workouts.csv").write_text("start,end,kind,kcal,avg_hr\n" + "".join(l + "\n" for l in lines))
+    return d
+
+
+def test_new_workouts_skips_logged_and_dupes(tmp_path, capsys):
+    st = _state_with_log(tmp_path, [("2026-11-20T07:09-0600", False)])
+    d = _workouts(tmp_path, ["2026-11-20T07:09-0600,2026-11-20T07:57-0600,traditionalStrengthTraining,239,",
+                             "2026-11-21T08:23-0600,2026-11-21T09:14-0600,running,500,",
+                             "2026-11-21T08:23-0600,2026-11-21T09:14-0600,other,498,"])
+    code, out, _ = run(capsys, "new-workouts", str(st), str(d))
+    assert code == 0
+    assert json.loads(out.splitlines()[0]) == [{"id": "2026-11-21T08:23-0600", "kind": "running",
+                                                "from": "2026-11-21T08:23-0600", "to": "2026-11-21T09:17-0600"}]
+
+
+def test_new_workouts_includes_provisional(tmp_path, capsys):
+    st = _state_with_log(tmp_path, [("2026-11-21T08:23-0600", True)])
+    d = _workouts(tmp_path, ["2026-11-21T08:23-0600,2026-11-21T09:14-0600,running,500,"])
+    _, out, _ = run(capsys, "new-workouts", str(st), str(d))
+    assert [w["id"] for w in json.loads(out.splitlines()[0])] == ["2026-11-21T08:23-0600"]
+
+
+def test_localize_new_files(tmp_path, capsys):
+    d = tmp_path / "in"
+    d.mkdir()
+    (d / "wk_hr.csv").write_text("time,bpm\n2026-11-21T14:23:39Z,150\n")
+    (d / "night_hr.csv").write_text("time,bpm\n2026-11-21T08:00:00Z,52\n")
+    (d / "wk_series.csv").write_text("time,speed,power,dist\n2026-11-21T14:23:39Z,2.6,231,0\n")
+    (d / "wk_stats.json").write_text(json.dumps({"workouts": [{
+        "start": "2026-11-21T14:23:39Z", "end": "2026-11-21T15:14:11Z", "kind": "running",
+        "laps": [{"start": "2026-11-21T14:23:39Z", "end": "2026-11-21T14:30:00Z", "dist": 1000}]}]}))
+    assert run(capsys, "localize", str(d), "America/Chicago")[0] == 0
+    assert (d / "wk_hr.csv").read_text().splitlines()[1].startswith("2026-11-21T08:23-0600")
+    assert (d / "night_hr.csv").read_text().splitlines()[1].startswith("2026-11-21T02:00-0600")
+    assert (d / "wk_series.csv").read_text().splitlines()[1].startswith("2026-11-21T08:23-0600")
+    w = json.loads((d / "wk_stats.json").read_text())["workouts"][0]
+    assert w["start"] == "2026-11-21T08:23-0600" and w["end"] == "2026-11-21T09:14-0600"
+    assert w["laps"][0]["start"] == "2026-11-21T08:23-0600"
+
+
+def test_emit_workout_doc_under_60kb(tmp_path, capsys):
+    trace = [[i * 5, 150.0 + i % 7] for i in range(6000)]
+    res = {"workouts": [{"id": "2026-11-21T08:23-0600", "hr": {"trace": trace}, "run": {"pace_trace": trace}}]}
+    p = tmp_path / "result.json"
+    p.write_text(json.dumps(res))
+    code, out, _ = run(capsys, "workout-doc", str(p), "2026-11-21T08:23-0600")
+    doc = json.loads(out)
+    assert code == 0 and len(out.encode()) <= 60_000 and doc["id"] == "2026-11-21T08:23-0600"
+    assert 0 < len(doc["hr"]["trace"]) < 6000
+    assert run(capsys, "workout-doc", str(p), "nope")[0] == 2

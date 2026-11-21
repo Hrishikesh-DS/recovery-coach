@@ -28,6 +28,13 @@ week FILE                  the dashboard's weekly row from weekly.json.
 backfill-weeks FILE DOB    the dashboard's weekly rows from a back-fill result.json (Body Age = age + delta; no
                            pace yet).
 sizes FOLDER               the size of each file in the folder, and the total.
+new-workouts STATE FOLDER  the workouts in the folder's localized workouts.csv not yet scored (not in the state's
+                           workout log, or provisional), duplicates collapsed: a JSON list of {"id", "kind", "from",
+                           "to"} (from = start, to = end + 3 minutes: the window to fetch raw heart rate for).
+workout-doc FILE ID        one workout's dashboard document from a result.json ("workouts"), compact; traces are
+                           thinned until it fits in 60 KB.
+localize also rewrites wk_hr.csv, wk_series.csv and night_hr.csv, and the start / end of each workout and lap in
+wk_stats.json.
 
 Exit status: 0 done; 2 bad input or arguments, with one line on stderr.
 """
@@ -41,13 +48,15 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .inputs import (DAY_STEPS, HR, InputError, _cell, _csv_rows, parse_time, read_hours, read_state,
+from .inputs import (DAY_STEPS, HR, InputError, _cell, _csv_rows, parse_time, read_hours, read_state, workout_id,
                      read_workouts)
 from .pipeline import activity_from
 
 STAMP = "%Y-%m-%dT%H:%M%z"
 TIME_COLUMNS = {"sleep.csv": 2, "hrv.csv": 1, "hours.csv": 1, "minutes.csv": 1, "workouts.csv": 2, "raw_hr.csv": 1,
-                "raw_steps.csv": 2}
+                "raw_steps.csv": 2, "wk_hr.csv": 1, "wk_series.csv": 1, "night_hr.csv": 1}
+AFTER_WORKOUT = timedelta(minutes=3)
+DOC_LIMIT = 60_000
 HOUR = timedelta(hours=1)
 MINUTE_SHARE = 0.5   # hours whose max reaches 50 % of HRmax are sent minute by minute (spec 3)
 
@@ -91,6 +100,27 @@ def localize(folder: Path, spec: str) -> None:
                     pass   # not a timestamp: the engine names the file and line
             out.append(",".join(cells))
         p.write_text("\n".join(out) + "\n", encoding="utf-8")
+    stats = folder / "wk_stats.json"
+    if stats.exists() and stats.stat().st_size:
+        try:
+            doc = json.loads(stats.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError:
+            doc = None   # the engine names the problem
+        if isinstance(doc, dict) and isinstance(doc.get("workouts"), list):
+            def fix(obj):
+                for key in ("start", "end"):
+                    if isinstance(obj.get(key), str):
+                        try:
+                            obj[key] = local(parse_time(obj[key], "wk_stats.json", None, naive_ok=True), tz).strftime(STAMP)
+                        except InputError:
+                            pass
+            for w in doc["workouts"]:
+                if isinstance(w, dict):
+                    fix(w)
+                    for lap in w.get("laps") or []:
+                        if isinstance(lap, dict):
+                            fix(lap)
+            stats.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print("localized")
 
 
@@ -205,6 +235,45 @@ def backfill_weeks(path: Path, dob: str) -> None:
     _print(out)
 
 
+def new_workouts(state: Path, folder: Path) -> None:
+    from .strain import dedupe_workouts
+    st = read_state(state)
+    done = {e.id for e in st.workouts if not e.provisional}
+    out = []
+    for w in dedupe_workouts(read_workouts(folder / "workouts.csv")):
+        wid = workout_id(w.start)
+        if wid not in done:
+            out.append({"id": wid, "kind": w.kind, "from": w.start.strftime(STAMP),
+                        "to": (w.end + AFTER_WORKOUT).strftime(STAMP)})
+    print(json.dumps(out))
+    print(f"{len(out)} workout(s) to score")
+
+
+def _thin(points: list, keep: int) -> list:
+    if len(points) <= keep:
+        return points
+    step = len(points) / keep
+    return [points[int(i * step)] for i in range(keep)]
+
+
+def workout_doc(path: Path, wid: str) -> None:
+    docs = _load(path, "workouts")
+    doc = next((d for d in docs if isinstance(d, dict) and d.get("id") == wid), None)
+    if doc is None:
+        raise InputError(path.name, None, f"no workout {wid!r}")
+    text = json.dumps(doc, separators=(",", ":"))
+    while len(text.encode()) > DOC_LIMIT:
+        hr, run = doc.get("hr") or {}, doc.get("run") or {}
+        before = len(text)
+        for block, key in ((hr, "trace"), (run, "pace_trace")):
+            if isinstance(block.get(key), list) and len(block[key]) > 10:
+                block[key] = _thin(block[key], len(block[key]) // 2)
+        text = json.dumps(doc, separators=(",", ":"))
+        if len(text) == before:
+            raise InputError(path.name, None, f"workout {wid} is too large for one document")
+    print(text)
+
+
 def sizes(folder: Path) -> None:
     total = 0
     for p in sorted(folder.iterdir()):
@@ -219,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, args in (("localize", ["folder", "tz"]), ("windows", ["folder", "hrmax"]),
                        ("aggregate", ["folder", "hrmax"]), ("first-day", ["state", "t"]),
                        ("emit", ["file", "key", "since?"]), ("week", ["file"]), ("backfill-weeks", ["file", "dob"]),
-                       ("sizes", ["folder"])):
+                       ("sizes", ["folder"]), ("new-workouts", ["state", "folder"]), ("workout-doc", ["file", "id"])):
         p = sub.add_parser(name)
         for a in args:
             p.add_argument(a.rstrip("?"), nargs="?" if a.endswith("?") else None)
@@ -244,6 +313,10 @@ def main(argv: list[str] | None = None) -> int:
             week(Path(a.file))
         elif a.command == "backfill-weeks":
             backfill_weeks(Path(a.file), a.dob)
+        elif a.command == "new-workouts":
+            new_workouts(Path(a.state), Path(a.folder))
+        elif a.command == "workout-doc":
+            workout_doc(Path(a.file), a.id)
         else:
             sizes(Path(a.folder))
     except InputError as e:
