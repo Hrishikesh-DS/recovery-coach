@@ -33,6 +33,10 @@ new-workouts STATE FOLDER  the workouts in the folder's localized workouts.csv n
                            "to"} (from = start, to = end + 3 minutes: the window to fetch raw heart rate for).
 workout-doc FILE ID        one workout's dashboard document from a result.json ("workouts"), compact; traces are
                            thinned until it fits in 60 KB.
+series FOLDER              merges raw_speed.csv and raw_power.csv (time,value) and raw_dist.csv (start,end,m) into
+                           wk_series.csv, with distance as a running total from each workout's start; distance
+                           samples longer than 30 s (another source's overlapping copy) are left out. Run it before
+                           localize.
 localize also rewrites wk_hr.csv, wk_series.csv and night_hr.csv, and the start / end of each workout and lap in
 wk_stats.json.
 
@@ -258,6 +262,48 @@ def _thin(points: list, keep: int) -> list:
     return [points[int(i * step)] for i in range(keep)]
 
 
+SERIES_PIECE_S = 30   # the watch writes distance every few seconds; longer pieces are another source's copy
+
+
+def _raw(folder: Path, name: str, cols: int) -> list[list]:
+    p = folder / name
+    if not p.exists():
+        return []
+    out = []
+    for i, line in enumerate(p.read_text(encoding="utf-8-sig").splitlines()[1:], start=2):
+        if not line.strip():
+            continue
+        cells = line.split(",")
+        if len(cells) != cols:
+            raise InputError(name, i, f"expected {cols} cells, found {len(cells)}")
+        times = [parse_time(c, name, i) for c in cells[:cols - 1]]
+        try:
+            value = float(cells[-1])
+        except ValueError:
+            raise InputError(name, i, f"{cells[-1]!r} is not a number") from None
+        out.append(times + [value])
+    return out
+
+
+def series(folder: Path) -> None:
+    speed = {t: v for t, v in _raw(folder, "raw_speed.csv", 2)}
+    power = {t: v for t, v in _raw(folder, "raw_power.csv", 2)}
+    pieces = [(s, e, m) for s, e, m in _raw(folder, "raw_dist.csv", 3) if (e - s).total_seconds() <= SERIES_PIECE_S]
+    wp = folder / "workouts.csv"
+    sessions = [(w.start, w.end + AFTER_WORKOUT) for w in read_workouts(wp)] if wp.exists() else []
+    lines = ["time,speed,power,dist"]
+    for t in sorted(set(speed) | set(power)):
+        run = next(((s, e) for s, e in sessions if s <= t <= e), None)
+        dist = sum(m for s, e, m in pieces if s >= run[0] and e <= t) if run else None
+        cells = [speed.get(t), power.get(t)]
+        lines.append(",".join([t.strftime(SECONDS),
+                               "" if cells[0] is None else f"{cells[0]:g}",
+                               "" if cells[1] is None else f"{cells[1]:.0f}",
+                               "" if dist is None else f"{dist:.1f}"]))
+    (folder / "wk_series.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"{len(lines) - 1} series line(s)")
+
+
 def workout_doc(path: Path, wid: str) -> None:
     docs = _load(path, "workouts")
     doc = next((d for d in docs if isinstance(d, dict) and d.get("id") == wid), None)
@@ -290,7 +336,8 @@ def main(argv: list[str] | None = None) -> int:
     for name, args in (("localize", ["folder", "tz"]), ("windows", ["folder", "hrmax"]),
                        ("aggregate", ["folder", "hrmax"]), ("first-day", ["state", "t"]),
                        ("emit", ["file", "key", "since?"]), ("week", ["file"]), ("backfill-weeks", ["file", "dob"]),
-                       ("sizes", ["folder"]), ("new-workouts", ["state", "folder"]), ("workout-doc", ["file", "id"])):
+                       ("sizes", ["folder"]), ("new-workouts", ["state", "folder"]), ("workout-doc", ["file", "id"]),
+                       ("series", ["folder"])):
         p = sub.add_parser(name)
         for a in args:
             p.add_argument(a.rstrip("?"), nargs="?" if a.endswith("?") else None)
@@ -319,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
             new_workouts(Path(a.state), Path(a.folder))
         elif a.command == "workout-doc":
             workout_doc(Path(a.file), a.id)
+        elif a.command == "series":
+            series(Path(a.folder))
         else:
             sizes(Path(a.folder))
     except InputError as e:

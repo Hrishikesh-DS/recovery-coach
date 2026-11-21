@@ -282,3 +282,24 @@ def test_emit_workout_doc_under_60kb(tmp_path, capsys):
     assert code == 0 and len(out.encode()) <= 60_000 and doc["id"] == "2026-11-21T08:23-0600"
     assert 0 < len(doc["hr"]["trace"]) < 6000
     assert run(capsys, "workout-doc", str(p), "nope")[0] == 2
+
+
+def test_series_merges_raw_samples_with_cumulative_distance(tmp_path, capsys):
+    d = _workouts(tmp_path, ["2026-11-21T08:00:00-0600,2026-11-21T08:10:00-0600,running,100,"])
+    write(d, "raw_speed.csv", ["time,value", "2026-11-21T08:00:10-0600,2.6", "2026-11-21T08:00:05-0600,2.5",
+                               "2026-11-21T07:50:00-0600,1.2"])
+    write(d, "raw_power.csv", ["time,value", "2026-11-21T08:00:05-0600,180"])
+    write(d, "raw_dist.csv", ["start,end,m", "2026-11-21T08:00:05-0600,2026-11-21T08:00:10-0600,12",
+                              "2026-11-21T08:00:00-0600,2026-11-21T08:05:00-0600,900",   # another source's long copy
+                              "2026-11-21T08:00:00-0600,2026-11-21T08:00:05-0600,10"])
+    code, out, _ = run(capsys, "series", str(d))
+    assert code == 0
+    assert (d / "wk_series.csv").read_text().splitlines() == [
+        "time,speed,power,dist", "2026-11-21T07:50:00-0600,1.2,,", "2026-11-21T08:00:05-0600,2.5,180,10.0",
+        "2026-11-21T08:00:10-0600,2.6,,22.0"]
+
+
+def test_series_without_raw_files_writes_a_header_only_file(tmp_path, capsys):
+    d = _workouts(tmp_path, [])
+    assert run(capsys, "series", str(d))[0] == 0
+    assert (d / "wk_series.csv").read_text() == "time,speed,power,dist\n"
