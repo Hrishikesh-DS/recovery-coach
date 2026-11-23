@@ -66,6 +66,9 @@ KINDS = {f"{Q}HeartRate": "hr", f"{Q}HeartRateVariabilitySDNN": "S", f"{Q}Restin
 RANGES = {"hr": HR, "S": HRV_MS, "R": HRV_MS, "rhr": HR, "resp": RESP, "vo2": VO2, "exercise": DAY_MIN,
           "steps": DAY_STEPS}
 DAILY_KINDS = ("rhr", "resp", "vo2", "exercise")
+# body composition -> body.csv (lean mass % of body mass, for the WHOOP-style Age)
+BODY = {f"{Q}BodyFatPercentage": "fat", f"{Q}LeanBodyMass": "lean", f"{Q}BodyMass": "mass"}
+TO_KG = {"kg": 1.0, "lb": 0.45359237, "g": 0.001}
 SLEEP_CODES = {"HKCategoryValueSleepAnalysisInBed": "B", "HKCategoryValueSleepAnalysisAsleepUnspecified": "S",
                "HKCategoryValueSleepAnalysisAsleep": "S", "HKCategoryValueSleepAnalysisAwake": "A",
                "HKCategoryValueSleepAnalysisAsleepCore": "C", "HKCategoryValueSleepAnalysisAsleepDeep": "D",
@@ -75,10 +78,10 @@ ENERGY, HEART_RATE = f"{Q}ActiveEnergyBurned", f"{Q}HeartRate"
 WATCH, OTHER = 0, 1
 NOON = 12 * 60
 MEMBER = "apple_health_export/export.xml"
-FILES = ("daily.csv", "sleep.csv", "hrv.csv", "hours.csv", "minutes.csv", "workouts.csv")
+FILES = ("daily.csv", "sleep.csv", "hrv.csv", "hours.csv", "minutes.csv", "workouts.csv", "body.csv")
 HEADERS = {"daily.csv": "date,steps,exercise_min,rhr,resp,vo2,max_hr", "sleep.csv": "start,end,code",
            "hrv.csv": "time,ms,type", "hours.csv": "hour_start,avg,min,max,steps", "minutes.csv": "time,bpm",
-           "workouts.csv": "start,end,kind,kcal,avg_hr"}
+           "workouts.csv": "start,end,kind,kcal,avg_hr", "body.csv": "date,lbm_pct"}
 
 
 class _Skip(Exception):
@@ -212,6 +215,7 @@ class _Collector:
         self.hrv: list = []                       # (stamp, ms, type, class)
         self.sleep: list = []                     # (night key, class, start, end, code)
         self.workouts: list = []                  # [start, end, kind, kcal, avg_hr]
+        self.body: dict = {}                      # (day, fat|lean|mass) -> (start, kg or fraction), the latest
         self.records = self.dropped = self.rmssd = 0
         self.rmssd_types: set[str] = set()
         self.exported: str | None = None
@@ -237,6 +241,8 @@ class _Collector:
 
     def _record(self, el) -> None:
         t = el.get("type") or ""
+        if t in BODY:
+            return self._body(el, BODY[t])
         kind = KINDS.get(t)
         if kind is None:
             if "RMSSD" not in t:
@@ -303,6 +309,39 @@ class _Collector:
             raise _Skip
         key = _ordinal(e[0]) - (1 if e[1] < NOON else 0)   # noon to noon
         self.sleep.append((key, WATCH if _is_watch(el) else OTHER, s, e, code))
+
+    def _body(self, el, kind: str) -> None:
+        start = el.get("startDate") or ""
+        day = start[:10]
+        if not self.lo <= day <= self.hi:
+            return
+        v = _num(el.get("value"))
+        if kind == "fat":
+            v = v / 100 if v > 1 else v           # Health stores a fraction; a percent is accepted too
+            if not 0.02 <= v <= 0.7:
+                raise _Skip
+        else:
+            unit = (el.get("unit") or "").lower()
+            if unit not in TO_KG:
+                raise _Skip
+            v *= TO_KG[unit]
+        prev = self.body.get((day, kind))
+        if prev is None or start >= prev[0]:
+            self.body[(day, kind)] = (start, v)
+
+    def _body_lines(self) -> list[str]:
+        out = []
+        for day in sorted({d for d, _ in self.body}):
+            fat, lean, mass = (self.body.get((day, k), (None, None))[1] for k in ("fat", "lean", "mass"))
+            if fat is not None:
+                pct = 100 * (1 - fat)
+            elif lean is not None and mass:
+                pct = 100 * lean / mass
+            else:
+                continue
+            if 30 <= pct <= 100:
+                out.append(f"{day},{pct:.1f}")
+        return out
 
     def _workout(self, el) -> None:
         start = el.get("startDate") or ""
@@ -425,7 +464,7 @@ class _Collector:
             return [x[-1] for x in sorted(items)]
 
         return {"daily.csv": daily, "sleep.csv": lines(sleep), "hrv.csv": lines(hrv), "hours.csv": lines(hours),
-                "minutes.csv": lines(minutes), "workouts.csv": lines(workouts)}
+                "minutes.csv": lines(minutes), "workouts.csv": lines(workouts), "body.csv": self._body_lines()}
 
 
 def _open(path: Path, stack: ExitStack):

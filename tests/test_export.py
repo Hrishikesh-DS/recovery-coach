@@ -384,7 +384,8 @@ def test_command_prints_a_line_per_file_and_the_rmssd_finding(steady_export, tmp
         size = (tmp_path / "in" / name).stat().st_size
         assert line.startswith(name) and " rows " in line and line.endswith(f"{size:,} B"), line
     assert out[2].split()[1:5] == ["30", "rows", (U - timedelta(days=29)).isoformat(), ".."]
-    assert out[8] == "vitals.json   {}" and out[9].startswith("RMSSD: ") and len(out) == 10
+    assert out[8].startswith("body.csv") and out[8].endswith("13 B")          # header only: no body readings
+    assert out[9] == "vitals.json   {}" and out[10].startswith("RMSSD: ") and len(out) == 11
     assert not (tmp_path / "in" / "state.json").exists()
 
 
@@ -463,3 +464,36 @@ def test_watch_source_with_no_break_space_and_no_device():
     assert _is_watch(el)
     assert not _is_watch(ET.Element("Record", {"sourceName": "Sam’s iPhone"}))
     assert _is_watch(ET.Element("Record", {"sourceName": "Health", "device": "<<HKDevice>, name:Apple Watch>"}))
+
+
+BODY_SRC = ("Health", None)
+
+
+def test_body_csv_lean_mass_percent_from_fat_else_lean_over_mass(tmp_path):
+    def build(w):
+        w.record(sx.Q + "BodyFatPercentage", BODY_SRC, local(U, 11, 39), value=0.228, unit="%")
+        w.record(sx.Q + "LeanBodyMass", BODY_SRC, local(U - timedelta(days=1), 8, 0), value=115, unit="lb")
+        w.record(sx.Q + "BodyMass", BODY_SRC, local(U - timedelta(days=1), 8, 1), value=148.6, unit="lb")
+        w.record(sx.Q + "LeanBodyMass", BODY_SRC, local(U - timedelta(days=2), 8, 0), value=52.0, unit="kg")
+        w.record(sx.Q + "BodyMass", BODY_SRC, local(U - timedelta(days=2), 8, 0), value=148.6, unit="lb")
+        w.record(sx.Q + "BodyMass", BODY_SRC, local(U - timedelta(days=3), 8, 0), value=67.4, unit="kg")   # alone: none
+    out = tmp_path / "out"
+    import_export(small_export(tmp_path, build), out, U, 5, 5)
+    assert (out / "body.csv").read_text().splitlines()[0] == "date,lbm_pct"
+    assert lines(out, "body.csv") == [f"{U - timedelta(days=2)},77.1", f"{U - timedelta(days=1)},77.4", f"{U},77.2"]
+
+
+def test_backfill_rows_take_lean_mass_from_body_csv(imported, tmp_path):
+    bf, _, _ = imported
+    folder = tmp_path / "bf"
+    shutil.copytree(bf, folder, ignore=shutil.ignore_patterns("out"))
+    (folder / "body.csv").write_text(f"date,lbm_pct\n{U - timedelta(days=3)},77.2\n")
+    assert main(["backfill", "--in", str(folder), "--out", str(folder / "out"), "--date", U.isoformat()]) == 0
+    rows = {r["date"]: r for r in json.loads((folder / "out" / "result.json").read_text())["rows"]}
+    assert rows[str(U - timedelta(days=3))]["lbm_pct"] == 77.2
+    assert rows[str(U - timedelta(days=4))].get("lbm_pct") is None
+
+
+def test_backfill_rows_have_logged_workout_zone_minutes(imported):
+    _, _, res = imported
+    assert all(r["z13_min"] is not None and r["z45_min"] is not None for r in res["rows"])

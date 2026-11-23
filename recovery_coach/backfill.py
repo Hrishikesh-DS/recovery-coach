@@ -134,6 +134,7 @@ def backfill(inp: Inputs, until: date | None = None) -> dict:
                      rhr=values["rhr"], resp=values["resp"], sleep_min=sleep_min, need_min=need, perf=perf,
                      debt_min=debt, onset_min=onset_min, wake_min=wake_min,
                      mvpa_min=ds.exercise_min if ds else None, vo2=ds.vo2 if ds else None,
+                     lbm_pct=(inp.body or {}).get(d),
                      flags=health_flags(values, hist))
         near = workouts_near.get(d, [])
         if d in covered:

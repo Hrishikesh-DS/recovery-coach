@@ -339,6 +339,7 @@ class Inputs:
     wk_stats: list[WorkoutStats] | None = None
     night_hr: list[tuple[datetime, float]] | None = None
     efforts: dict[str, float] | None = None
+    body: dict[date, float] | None = None
 
 
 # ---------------------------------------------------------------- plausible ranges
@@ -509,6 +510,17 @@ def read_daily(path: Path) -> list[DailyStat]:
                              _cell(ex, name, n, "exercise_min", DAY_MIN, True), _cell(rhr, name, n, "rhr", HR, True),
                              _cell(resp, name, n, "resp", RESP, True), _cell(vo2, name, n, "vo2", VO2, True),
                              _cell(mx, name, n, "max_hr", HR, True)))
+    return out
+
+
+def read_body(path: Path) -> dict[date, float]:
+    """body.csv (the import's body composition): date,lbm_pct -> {date: lean mass % of body mass}."""
+    name, out = path.name, {}
+    for n, (d, pct) in _csv_rows(path, ["date", "lbm_pct"]):
+        day = _parse_date(d, name, n)
+        if day in out:
+            raise InputError(name, n, f"duplicate date {d}")
+        out[day] = _cell(pct, name, n, "lbm_pct", LBM, False)
     return out
 
 
@@ -867,7 +879,7 @@ OPTIONAL = {"sleep.csv": ("sleep", read_sleep), "hrv.csv": ("hrv", read_hrv), "h
             "daily.csv": ("daily", read_daily), "state_long.json": ("state_long", read_state_long),
             "wk_hr.csv": ("wk_hr", read_wk_hr), "wk_series.csv": ("wk_series", read_wk_series),
             "wk_stats.json": ("wk_stats", read_wk_stats), "night_hr.csv": ("night_hr", read_night_hr),
-            "efforts.json": ("efforts", read_efforts)}
+            "efforts.json": ("efforts", read_efforts), "body.csv": ("body", read_body)}
 
 
 REQUIRED = {
