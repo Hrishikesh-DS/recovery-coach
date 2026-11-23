@@ -303,3 +303,74 @@ def test_series_without_raw_files_writes_a_header_only_file(tmp_path, capsys):
     d = _workouts(tmp_path, [])
     assert run(capsys, "series", str(d))[0] == 0
     assert (d / "wk_series.csv").read_text() == "time,speed,power,dist\n"
+
+
+# ---------------------------------------------------------------- rebuild-age
+from datetime import date as _date, timedelta as _td   # noqa: E402
+
+import pytest   # noqa: E402
+
+from recovery_coach.export import import_export   # noqa: E402
+from recovery_coach.inputs import Settings, read_state, read_state_long, row_from_dict   # noqa: E402
+from recovery_coach.state import compact_state, long_state   # noqa: E402
+from test_export import SETTINGS as EXPORT_SETTINGS, U, sx   # noqa: E402
+
+SUNDAY = _date(2026, 11, 15)
+
+
+@pytest.fixture(scope="module")
+def rebuilt(tmp_path_factory):
+    work = tmp_path_factory.mktemp("rebuild")
+    xml = work / "export.xml"
+    with sx.ExportWriter(xml) as w:
+        sx.steady(w, U - _td(days=69), 71)
+    imp = work / "imp"
+    import_export(xml, imp, U, 70, 70)
+    (imp / "body.csv").write_text(f"date,lbm_pct\n{U - _td(days=5)},77.2\n")
+    (imp / "state.json").write_text(json.dumps({"settings": EXPORT_SETTINGS, "rows": [], "weeks": []}))
+    assert subprocess.run([sys.executable, "-m", "recovery_coach", "backfill", "--in", str(imp), "--out",
+                           str(work / "bf"), "--date", U.isoformat()], cwd=ROOT).returncode == 0
+    rows = [row_from_dict(r) for r in json.loads((work / "bf" / "result.json").read_text())["rows"]]
+    live = U - _td(days=2)
+    for r in rows:                                  # the stored history: written before the new columns existed
+        r.z13_min = r.z45_min = r.lbm_pct = None
+        if r.date == live.isoformat():
+            r.z13_min = 99.0                        # a value a live morning stored: must survive
+    s = Settings(dob=_date(1990, 6, 15), sex="male")
+    (work / "daily.json").write_text(json.dumps(compact_state(s, rows, None, 60)))
+    (work / "long.json").write_text(json.dumps(long_state(rows, [])))
+    out = work / "out"
+    code = main(["rebuild-age", str(imp), str(work / "daily.json"), str(work / "long.json"), str(out),
+                 SUNDAY.isoformat()])
+    return code, out, live
+
+
+def test_rebuild_age_keeps_live_values_and_fills_the_rest(rebuilt):
+    code, out, live = rebuilt
+    assert code == 0
+    daily = {r.date: r for r in read_state(out / "state_daily.json").rows}
+    assert daily[live.isoformat()].z13_min == 99.0                     # kept
+    assert daily[live.isoformat()].z45_min is not None                 # filled
+    other = (live - _td(days=1)).isoformat()
+    assert daily[other].z13_min is not None and daily[other].z45_min is not None
+    assert daily[(U - _td(days=5)).isoformat()].lbm_pct == 77.2
+    long = read_state_long(out / "state_long.json")
+    assert {r.date for r in long.rows} >= set(daily)
+
+
+def test_rebuild_age_days_patch_lists_only_filled_values(rebuilt):
+    _, out, live = rebuilt
+    days = {d["date"]: d for d in json.loads((out / "days.json").read_text())}
+    assert "z13_min" not in days[live.isoformat()] and "z45_min" in days[live.isoformat()]
+    assert days[(U - _td(days=5)).isoformat()]["lbm_pct"] == 77.2
+
+
+def test_rebuild_age_weeks_end_on_the_sunday_with_the_new_model(rebuilt):
+    _, out, _ = rebuilt
+    weeks = json.loads((out / "weeks.json").read_text())
+    assert 1 <= len(weeks) <= 30 and weeks[-1]["date"] == SUNDAY.isoformat()
+    assert all(_date.fromisoformat(w["date"]).weekday() == 6 and w["items"] for w in weeks)
+    assert all(set(w) == {"date", "body_age", "age", "pace", "items", "journal"} for w in weeks)
+    long_weeks = read_state_long(out / "state_long.json").weeks
+    assert [w.date.isoformat() for w in long_weeks] == [w["date"] for w in weeks]
+    assert long_weeks[-1].delta == pytest.approx(weeks[-1]["body_age"] - weeks[-1]["age"], abs=0.02)

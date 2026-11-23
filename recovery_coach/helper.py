@@ -28,6 +28,13 @@ week FILE                  the dashboard's weekly row from weekly.json.
 backfill-weeks FILE DOB    the dashboard's weekly rows from a back-fill result.json (Body Age = age + delta; no
                            pace yet).
 sizes FOLDER               the size of each file in the folder, and the total.
+rebuild-age IMPORT DAILY LONG OUT SUNDAY
+                           adds the WHOOP-style Age's columns (zone minutes, lean mass %) to stored states from an
+                           import's back-fill, keeping every value a morning already stored, and recomputes the weekly
+                           snapshots for the 30 Sundays ending SUNDAY. IMPORT: the import's folder (its state.json is
+                           not read; settings come from DAILY). Writes OUT/state_daily.json, OUT/state_long.json,
+                           OUT/days.json ([{date, <filled fields>}] for the dashboard's day documents) and
+                           OUT/weeks.json (the dashboard's weekly rows, oldest first).
 new-workouts STATE FOLDER  the workouts in the folder's localized workouts.csv not yet scored (not in the state's
                            workout log, or provisional), duplicates collapsed: a JSON list of {"id", "kind", "from",
                            "to"} (from = start, to = end + 3 minutes: the window to fetch raw heart rate for).
@@ -243,6 +250,75 @@ def backfill_weeks(path: Path, dob: str) -> None:
     _print(out)
 
 
+REBUILD_FIELDS = ("z13_min", "z45_min", "lbm_pct")
+REBUILD_WEEKS = 30
+
+
+def rebuild_age(import_dir: Path, daily_path: Path, long_path: Path, out: Path, sunday_text: str) -> None:
+    from dataclasses import replace
+
+    from .backfill import backfill
+    from .inputs import OPTIONAL, REQUIRED, Inputs, State, Week, read_state_long, row_from_dict
+    from .pipeline import age_on
+    from .state import DAILY_DAYS, compact_state, long_state
+    from .whoop_age import whoop_age
+
+    sunday = _date(sunday_text, "SUNDAY")
+    if sunday.weekday() != 6:
+        raise InputError("SUNDAY", None, f"{sunday_text} is not a Sunday")
+    daily, long = read_state(daily_path), read_state_long(long_path)
+    s = daily.settings
+    for name in REQUIRED["backfill"]:
+        if name != "state.json" and not (import_dir / name).is_file():
+            raise InputError(name, None, "file not found (run the import first)")
+    found = {attr: reader(import_dir / name) for name, (attr, reader) in OPTIONAL.items()
+             if (import_dir / name).is_file() and name != "state_long.json"}
+    inp = Inputs(State(s, [], []), **found)
+    until = max(d.date for d in inp.daily) if inp.daily else sunday
+    imported = {r["date"]: row_from_dict(r, "result", "row") for r in backfill(inp, until)["rows"]}
+
+    filled: dict[str, dict] = {}
+
+    def patch(rows):
+        out_rows = []
+        for r in rows:
+            src = imported.get(r.date)
+            new = {f: getattr(src, f) for f in REBUILD_FIELDS
+                   if src is not None and getattr(r, f) is None and getattr(src, f) is not None}
+            if new:
+                filled.setdefault(r.date, {}).update(new)
+                r = replace(r, **new)
+            out_rows.append(r)
+        return out_rows
+
+    d_rows, l_rows = patch(daily.rows), patch(long.rows)
+    by = {r.date: r for r in imported.values()}
+    by.update({r.date: r for r in l_rows})
+    by.update({r.date: r for r in d_rows})
+    rows = [by[k] for k in sorted(by)]
+    weeks, docs = [], []
+    for k in range(REBUILD_WEEKS - 1, -1, -1):
+        d = sunday - timedelta(weeks=k)
+        age = age_on(s.dob, d)
+        wa = whoop_age([r for r in rows if r.date <= d.isoformat()], d, age, s.sex)
+        missed = {n for n, _ in wa.missing}
+        counted = [i.name for i in wa.items if i.name not in missed]
+        if not counted:
+            continue
+        weeks.append(Week(d, round(wa.delta, 2), tuple(counted)))
+        docs.append({"date": d.isoformat(), "body_age": round(wa.body_age, 2), "age": round(age, 2),
+                     "pace": None if wa.pace is None else round(wa.pace, 2), "items": counted, "journal": []})
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "state_daily.json").write_text(json.dumps(compact_state(s, d_rows, None, DAILY_DAYS,
+                                                                   workouts=daily.workouts), separators=(",", ":")))
+    (out / "state_long.json").write_text(json.dumps(long_state(rows, weeks), separators=(",", ":")))
+    (out / "days.json").write_text(json.dumps([{"date": k, **v} for k, v in sorted(filled.items())],
+                                              separators=(",", ":")))
+    (out / "weeks.json").write_text(json.dumps(docs, separators=(",", ":")))
+    print(f"filled {len(filled)} days; {len(weeks)} weekly snapshots; latest: "
+          + (f"{docs[-1]['body_age']} (age {docs[-1]['age']}, pace {docs[-1]['pace']})" if docs else "none"))
+
+
 def new_workouts(state: Path, folder: Path) -> None:
     from .strain import dedupe_workouts
     st = read_state(state)
@@ -337,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
                        ("aggregate", ["folder", "hrmax"]), ("first-day", ["state", "t"]),
                        ("emit", ["file", "key", "since?"]), ("week", ["file"]), ("backfill-weeks", ["file", "dob"]),
                        ("sizes", ["folder"]), ("new-workouts", ["state", "folder"]), ("workout-doc", ["file", "id"]),
-                       ("series", ["folder"])):
+                       ("series", ["folder"]), ("rebuild-age", ["import_dir", "daily", "long", "out", "sunday"])):
         p = sub.add_parser(name)
         for a in args:
             p.add_argument(a.rstrip("?"), nargs="?" if a.endswith("?") else None)
@@ -368,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
             workout_doc(Path(a.file), a.id)
         elif a.command == "series":
             series(Path(a.folder))
+        elif a.command == "rebuild-age":
+            rebuild_age(Path(a.import_dir), Path(a.daily), Path(a.long), Path(a.out), a.sunday)
         else:
             sizes(Path(a.folder))
     except InputError as e:
