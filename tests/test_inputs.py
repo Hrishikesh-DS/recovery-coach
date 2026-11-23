@@ -128,11 +128,16 @@ def test_csv_values(tmp_path):
     ({"resp": 50}, "resp"), ({"spo2": 60}, "spo2"), ({"spo2": 0.5}, "spo2"), ({"wtemp": 45}, "wtemp"),
     ({"weight_kg": 300}, "weight_kg"), ({"height_m": 178}, "height_m"), ({"vo2": 5}, "vo2"),
     ({"rhr": "55"}, "rhr"), ({"resp_rate": 15}, "resp_rate"), ({"exercise_min_yesterday": -1}, "exercise"),
+    ({"lbm_pct": 101}, "lbm_pct"), ({"lbm_pct": 0.77}, "lbm_pct"),
 ])
 def test_vitals_validation(tmp_path, vitals, words):
     with pytest.raises(InputError) as e:
         read_vitals(write(tmp_path, "vitals.json", json.dumps(vitals)))
     assert e.value.file == "vitals.json" and words in e.value.message
+
+
+def test_vitals_lbm_pct(tmp_path):
+    assert read_vitals(write(tmp_path, "vitals.json", json.dumps({"lbm_pct": 77.2}))).lbm_pct == 77.2
 
 
 def test_vitals_values(tmp_path):

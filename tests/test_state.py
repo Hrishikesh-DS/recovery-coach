@@ -43,7 +43,7 @@ def test_compact_keeps_engine_fields_for_their_days_at_their_precision(tmp_path)
     for name in ("zone", "tsb", "need_min", "mvpa_min", "vig_min", "journal"):
         assert name not in cols                                                # derived or read by nothing
     for name, (_, days) in STATE_FIELDS.items():
-        assert len(cols[name]) <= days, name                                   # end-aligned, kept for its days
+        assert len(cols.get(name, [])) <= days, name                           # end-aligned, kept for its days
     assert len(cols["hrv_ln"]) == 60 and len(cols["still_hr"]) == 15 and len(cols["sleep_min"]) == 180
     assert cols["hrv_ln"][-1] == 4.012 and cols["sleep_hr"][-1] == 50 and cols["resp"][-1] == 14.8
     assert cols["wtemp"][-1] == 35.6 and cols["perf"][-1] == 0.912 and cols["sleep_min"][-1] == 452
@@ -166,3 +166,26 @@ def test_long_document_reads_without_settings(tmp_path):
     p.write_text(json.dumps(long_state(full_rows(10), [Week(date(2026, 11, 15), -1.5, ("rhr",))])))
     st = read_state_long(p)
     assert st.settings is None and len(st.rows) == 10 and st.weeks[0].items == ("rhr",)
+
+
+def test_round_trip_new_columns(tmp_path):
+    rows = full_rows(200)
+    for i, r in enumerate(rows):
+        r.z13_min, r.z45_min, r.lbm_pct = 40.0 + i % 3, 12.0, (77.2 if i == 150 else None)
+    back = read_state(write(tmp_path, compact_state(Settings(dob=date(1990, 1, 1), sex="male"), rows, None, 180)))
+    by = {r.date: r for r in back.rows}
+    last = rows[-1]
+    assert by[last.date].z13_min == last.z13_min and by[last.date].z45_min == 12.0
+    assert by[rows[150].date].lbm_pct == 77.2
+    assert by[rows[-180].date].sleep_hr is not None      # sleeping HR now kept for 180 days
+
+
+def test_old_state_without_new_columns_loads(tmp_path):
+    rows = full_rows(30)
+    doc = compact_state(Settings(dob=date(1990, 1, 1), sex="male"), rows, None, 60)
+    for k in ("z13_min", "z45_min", "lbm_pct"):
+        doc["cols"].pop(k, None)
+    from recovery_coach.inputs import state_crc
+    doc["crc"] = state_crc(doc["cols"])
+    back = read_state(write(tmp_path, doc))
+    assert all(r.z13_min is None and r.lbm_pct is None for r in back.rows)

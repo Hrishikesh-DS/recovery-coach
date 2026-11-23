@@ -7,6 +7,7 @@ import pytest
 from recovery_coach.inputs import DayRow, HourStat, HrvReading, Workout
 from recovery_coach.pipeline import (
     activity_from, hrv_band, load_for_day, minutes_at_or_above, night_hrv, rel_min, sleeping_hr, strength_minutes,
+    workout_zone_minutes,
 )
 
 CDT = timezone(timedelta(hours=-5))
@@ -116,3 +117,23 @@ def test_hrv_band_in_ms():
     assert centre == pytest.approx(50.0)
     assert spread == pytest.approx((math.exp(math.log(50) + 0.14826) - math.exp(math.log(50) - 0.14826)) / 2)
     assert hrv_band(hist[:13]) == (None, None)
+
+
+def test_workout_zone_minutes_splits_zones_1_3_and_4_5():
+    w = Workout(at(8), at(8, 30), "running")
+    mins = [(at(8, i), 130.0 if i < 15 else 170.0) for i in range(30)]    # HRmax 200: 65% then 85%
+    assert workout_zone_minutes([w], mins, date(2026, 11, 19), 200.0, True) == pytest.approx((15.0, 15.0))
+
+
+def test_workout_zone_minutes_counts_a_duplicate_once_and_ignores_other_days():
+    w = Workout(at(8), at(8, 30), "running")
+    other = Workout(at(8, day=18), at(8, 30, day=18), "running")
+    mins = [(at(8, i), 170.0) for i in range(30)]
+    assert workout_zone_minutes([w, w, other], mins, date(2026, 11, 19), 200.0, True) == pytest.approx((0.0, 30.0))
+
+
+def test_workout_zone_minutes_zero_on_worn_day_without_workouts_none_when_unworn():
+    assert workout_zone_minutes([], [], date(2026, 11, 19), 200.0, True) == (0.0, 0.0)
+    w = Workout(at(8), at(8, 30), "running")
+    assert workout_zone_minutes([w], [], date(2026, 11, 19), 200.0, True) == (0.0, 0.0)
+    assert workout_zone_minutes([w], [], date(2026, 11, 19), 200.0, False) == (None, None)

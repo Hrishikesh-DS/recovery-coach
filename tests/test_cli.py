@@ -442,3 +442,18 @@ def test_thin_inputs_withhold_with_reasons(tmp_path):
     (empty / "state.json").write_text(json.dumps({"settings": doc["settings"], "rows": []}))
     assert main(["backfill", "--in", str(empty), "--out", str(tmp_path / "o4")]) == 2
     assert main(["weekly", "--in", str(empty), "--out", str(tmp_path / "o5")]) == 2
+
+
+def test_run_stores_lean_mass_today_and_zone_minutes_yesterday(chain, tmp_path):
+    work, _ = chain
+    dst = tmp_path / "day"
+    shutil.copytree(work / "day090", dst, ignore=shutil.ignore_patterns("out"))
+    raw = (dst / "vitals.json").read_text()
+    v = json.loads(raw) if raw.strip() else {}
+    v["lbm_pct"] = 77.2
+    (dst / "vitals.json").write_text(json.dumps(v))
+    r = cli("run", "--in", dst, "--out", dst / "out", "--date", gen.day_date(90).isoformat())
+    assert r.returncode == 0, r.stderr
+    rows = json.loads((dst / "out" / "result.json").read_text())["rows"]
+    assert rows[0]["lbm_pct"] == 77.2
+    assert rows[1]["z13_min"] is not None and rows[1]["z45_min"] is not None

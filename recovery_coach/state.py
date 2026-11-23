@@ -32,11 +32,11 @@ KEEP_WEEKS = 30   # Pace of Aging: 26 points after a 4-week moving average
 #   and journal effects (with recovery); 36: weekly averages (week + 4 weeks before, ending the day before the
 #   latest row); 29: training load chart and the 28-day load ratio; 15: stress baseline; 8: weekly focus and flags
 STATE_FIELDS: dict[str, tuple[int | None, int]] = {
-    "recovery": (0, 180), "hrv_ln": (3, 60), "sleep_hr": (1, 60), "rhr": (1, 180), "resp": (1, 60),
+    "recovery": (0, 180), "hrv_ln": (3, 60), "sleep_hr": (1, 180), "rhr": (1, 180), "resp": (1, 60),
     "spo2": (1, 60), "wtemp": (1, 60), "sleep_min": (0, 180), "perf": (3, 60), "debt_min": (0, 8),
     "onset_min": (0, 180), "wake_min": (0, 180), "strain": (1, 36), "trimp": (1, 29), "stress": (2, 36),
     "still_hr": (1, 15), "ctl": (1, 29), "atl": (1, 29), "acwr": (2, 8), "steps": (0, 180),
-    "strength_min": (0, 180), "vo2": (1, 180), "flags": (None, 8),
+    "strength_min": (0, 180), "vo2": (1, 180), "z13_min": (0, 180), "z45_min": (0, 180), "lbm_pct": (1, 180), "flags": (None, 8),
     "wload": (1, 29), "srpe": (0, 29),
 }
 JOURNAL_DAYS = 180

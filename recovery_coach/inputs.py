@@ -232,6 +232,9 @@ class DayRow:
     form_pct: float | None = None
     ramp: float | None = None
     pi7: float | None = None        # Polarization Index of the 7 days ending that day
+    z13_min: float | None = None    # minutes in heart-rate zones 1-3 (50-80% HRmax) inside logged workouts
+    z45_min: float | None = None    # minutes in zones 4-5 (>= 80% HRmax) inside logged workouts
+    lbm_pct: float | None = None    # lean body mass, % of body mass (a reading that day)
 
 
 @dataclass
@@ -270,6 +273,7 @@ class Vitals:
     exercise_min_yesterday: float | None = None
     weight_kg: float | None = None
     height_m: float | None = None
+    lbm_pct: float | None = None
 
 
 @dataclass
@@ -346,6 +350,7 @@ WTEMP = (30, 42)
 WEIGHT = (30, 250)
 HEIGHT = (1.2, 2.3)
 VO2 = (10, 90)
+LBM = (30, 100)
 DAY_MIN = (0, 1440)
 HOUR_STEPS = (0, 30_000)
 DAY_STEPS = (0, 200_000)
@@ -571,6 +576,7 @@ def read_vitals(path: Path) -> Vitals:
         exercise_min_yesterday=_num(doc.get("exercise_min_yesterday"), name, "exercise_min_yesterday", DAY_MIN),
         weight_kg=_num(doc.get("weight_kg"), name, "weight_kg", WEIGHT, " (kg)"),
         height_m=_num(doc.get("height_m"), name, "height_m", HEIGHT, " (metres, not cm)"),
+        lbm_pct=_num(doc.get("lbm_pct"), name, "lbm_pct", LBM, " (%, not a fraction)"),
     )
 
 
@@ -652,7 +658,7 @@ ROW_DECIMALS = {"hrv_ln": 4, "sleep_hr": 1, "rhr": 1, "resp": 2, "spo2": 1, "wte
                 "need_min": 1, "perf": 3, "debt_min": 1, "strain": 2, "trimp": 1, "stress": 2, "ctl": 2, "atl": 2,
                 "tsb": 2, "acwr": 3, "steps": 0, "mvpa_min": 1, "vig_min": 1, "strength_min": 1, "vo2": 1,
                 "wload": 1, "srpe": 0, "azm": 0, "ri_h": 2, "mono": 2, "tstrain": 0, "form_pct": 1, "ramp": 1,
-                "pi7": 2}
+                "pi7": 2, "z13_min": 1, "z45_min": 1, "lbm_pct": 1}
 ROW_KEYS = [f.name for f in fields(DayRow)]
 
 

@@ -41,7 +41,7 @@ from .stats import robust_baseline
 from .strain import (DEFAULT_K, GAP_CAP_MIN, LAST_READING_MIN, day_strain, dedupe_workouts, hr_max, strain,
                      strain_target, trimp, workout_strain)
 from .state import as_read_back, next_state
-from . import session
+from . import hr_metrics, session
 from .sleep import recovery_index
 from .stress import stress_day
 
@@ -102,6 +102,24 @@ def strength_minutes(workouts: list[Workout], d: date, worn: bool) -> float | No
     if total > 0:
         return total
     return 0.0 if worn else None
+
+
+def workout_zone_minutes(workouts: list[Workout], minutes: list[tuple[datetime, float]], d: date, hrmax: float,
+                         worn: bool) -> tuple[float | None, float | None]:
+    """(zones 1-3, zones 4-5) minutes of minute heart rate inside the (de-duplicated) workouts started on d, by the
+    zone limits of hr_metrics (50/60/70/80/90% HRmax), as WHOOP counts zone time of logged activities. (0, 0) on a
+    worn day without any; (None, None) when the watch recorded nothing that day."""
+    if not worn:
+        return None, None
+    z13 = z45 = 0.0
+    readings = sorted(minutes)
+    for w in dedupe_workouts(workouts):
+        if w.start.date() != d:
+            continue
+        z = hr_metrics.zone_minutes(readings, w.start, w.end, hrmax)
+        z13 += z[0] + z[1] + z[2]
+        z45 += z[3] + z[4]
+    return z13, z45
 
 
 def minutes_at_or_above(readings: list[tuple[datetime, float]], bpm: float) -> float:
@@ -224,6 +242,7 @@ def day_activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax
              "steps": sum(h.steps for h in hours) if hours else None,
              "vig_min": minutes_at_or_above(mins, VIGOROUS_FRACTION * hrmax) if on else None,
              "strength_min": strength_minutes(workouts, d, on)}
+    patch["z13_min"], patch["z45_min"] = workout_zone_minutes(workouts, mins, d, hrmax, on)
     if yesterday and vitals.exercise_min_yesterday is not None:
         patch["mvpa_min"] = vitals.exercise_min_yesterday
     if yesterday and vitals.vo2 is not None:
@@ -339,7 +358,7 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
     today_row = stored(DayRow(date=t.isoformat(), recovery=rec.score, zone=rec.zone, hrv_ln=hrv_ln, sleep_hr=shr,
                               rhr=vitals.rhr, resp=vitals.resp, spo2=vitals.spo2, wtemp=vitals.wtemp,
                               sleep_min=sleep_min, need_min=need, perf=perf, debt_min=debt, onset_min=onset_min,
-                              wake_min=wake_min, flags=flags, ri_h=ri_h))
+                              wake_min=wake_min, flags=flags, ri_h=ri_h, lbm_pct=vitals.lbm_pct))
 
     # ---- the log as it stands after this run
     by[t.isoformat()] = today_row
@@ -400,7 +419,8 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
         e = by_id.get(workout_id(datetime.fromisoformat(item["start"])))
         if e is not None:
             item.update(id=e.id, te=e.te, te_an=e.te_an, rec_h=e.rec_h, hrr60=e.hrr60, benefit=e.benefit)
-    out_rows = [row_to_dict(today_row, TODAY_KEYS + (("ri_h",) if ri_h is not None else ()))]
+    extra = (("ri_h",) if ri_h is not None else ()) + (("lbm_pct",) if vitals.lbm_pct is not None else ())
+    out_rows = [row_to_dict(today_row, TODAY_KEYS + extra)]
     out_rows += [row_to_dict(by[d.isoformat()], patches[d].keys()) for d in sorted(patches, reverse=True)]
     if inp.journal is not None and inp.journal.date not in patches:
         out_rows.append({"date": inp.journal.date.isoformat(), "journal": dict(inp.journal.answers)})
