@@ -25,7 +25,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 
 from . import load
-from .healthspan import body_age
+from .whoop_age import whoop_age
 from .inputs import DayRow, InputError, Inputs, State, Week, row_to_dict
 from .monitor import health_flags
 from .pipeline import (HISTORY_DAYS, NO_PREV_NIGHT, age_on, day_activity, load_for_day, night_hrv, rel_min,
@@ -40,7 +40,7 @@ from .strain import calibrate_k, hr_max, strain, trimp
 # SDNN: every night stays scored and no baseline mixes the two.
 MIN_RMSSD_NIGHTS = 14
 SNAPSHOT_WEEKDAY = 6        # Sunday: weekly snapshots end on the day before the Monday report
-SNAPSHOT_MIN_DAYS = 30      # Body Age items need 30 days of data
+SNAPSHOT_MIN_DAYS = 30      # WHOOP-style Age metrics need 30 days of data
 NEAR = timedelta(days=1)    # what a day's activity can touch: intervals within a day of it (offsets, overnight)
 
 
@@ -161,9 +161,10 @@ def backfill(inp: Inputs, until: date | None = None) -> dict:
         if d.weekday() != SNAPSHOT_WEEKDAY or (d - first).days + 1 < SNAPSHOT_MIN_DAYS:
             continue
         a = age_on(s.dob, d)
-        ba = body_age(a, s.sex, window(log, d + timedelta(days=1), 180), s.weight_kg, s.height_m)
-        if ba.body_age is not None:
-            weeks.append(Week(d, round(ba.body_age - a, 2), tuple(i.name for i in ba.items)))
+        wa = whoop_age([r for r in log if r.date <= d.isoformat()], d, a, s.sex)
+        missed = {n for n, _ in wa.missing}
+        if len(missed) < len(wa.items):
+            weeks.append(Week(d, round(wa.delta, 2), tuple(i.name for i in wa.items if i.name not in missed)))
     patch = {"hrmax": hrmax, "k": k, "hrv_type": hrv_type}
     new_rows = [row_to_dict(r) for r in new]
     kept = [w for w in inp.state.weeks if w.date not in {x.date for x in weeks}]

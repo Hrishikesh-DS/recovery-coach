@@ -689,42 +689,77 @@
   "body_age": 28.74,
   "age": 30.6,
   "pace": 0.82,
+  "pace_reason": null,
+  "model": "whoop-v1",
   "items": [
    {
-    "name": "sleep_duration",
+    "name": "Hours of sleep",
     "value": 7.52,
+    "unit": "h",
+    "target": 7.0,
     "years": -0.2
    },
    {
-    "name": "sleep_regularity",
-    "value": 78.4,
-    "years": 0.4
+    "name": "Sleep consistency",
+    "value": 73.4,
+    "unit": "%",
+    "target": 70.0,
+    "years": -0.4
    },
    {
-    "name": "activity",
+    "name": "Steps",
     "value": 9812.0,
-    "years": -1.1
+    "unit": "steps/day",
+    "target": 8000.0,
+    "years": 0.0
    },
    {
-    "name": "vo2max",
-    "value": 49.1,
-    "years": -1.5
+    "name": "Zones 1-3",
+    "value": 190.0,
+    "unit": "min/week",
+    "target": 100.0,
+    "years": -0.5
    },
    {
-    "name": "rhr",
-    "value": 51.6,
-    "years": -0.6
+    "name": "Zones 4-5",
+    "value": 62.4,
+    "unit": "min/week",
+    "target": 10.0,
+    "years": -0.7
    },
    {
-    "name": "body_comp",
-    "value": 24.1,
+    "name": "Strength",
+    "value": 80.2,
+    "unit": "min/week",
+    "target": 40.0,
     "years": -0.1
+   },
+   {
+    "name": "VO2 max",
+    "value": 41.1,
+    "unit": "mL/kg/min",
+    "target": 44.0,
+    "years": 0.6
+   },
+   {
+    "name": "Resting HR",
+    "value": 52.6,
+    "unit": "bpm",
+    "target": 60.0,
+    "years": -0.56
+   },
+   {
+    "name": "Lean body mass",
+    "value": null,
+    "unit": "%",
+    "target": 80.0,
+    "years": 0.0
    }
   ],
   "missing": [
    [
-    "strength",
-    "only 21 days since strength records began (need >= 30); activity uses steps only"
+    "Lean body mass",
+    "no body fat or lean mass reading in the last 90 days"
    ]
   ]
  },

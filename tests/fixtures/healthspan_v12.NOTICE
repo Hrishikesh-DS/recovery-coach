@@ -1,7 +1,0 @@
-tests/fixtures/healthspan_v12.json is copied unchanged from
-  https://github.com/SongyuQi-Francisco/Watch2Whoop
-  commit 003882464e197d42fd4b3163bcc47219d6e1e40e
-  packages/openbodyscore/tests/golden/healthspan_v12.json
-Its inputs are synthetic (function arguments listed in packages/openbodyscore/tests/golden_cases.py, healthspan_v12_cases).
-Licensed under the Apache License, Version 2.0 (Copyright 2026 Watch2Whoop contributors); see
-packages/openbodyscore/LICENSE and NOTICE in the source repository.

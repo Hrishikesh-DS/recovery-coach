@@ -40,19 +40,17 @@ weekly_card(result):
   series          [{date, recovery, zone, strain, perf, stress}] 28 days ending week_end, oldest first
   trends          {hrv: [{date, value}], rhr: [...], vo2: [...]} oldest first (VO2 max readings may be sparse)
   load            [{date, ctl, atl, tsb}] oldest first
-  body_age        {body_age: float, age: float, pace: float (-1..3), items: [{name, value, years}],
-                   missing: [[item, reason]]} | null
-                   item names: sleep_duration (h), sleep_regularity (raw SRI -100..100, shown clamped 0-100),
-                   activity (steps/day; strength min/week when missing lists "steps"), vo2max, rhr, body_comp (BMI);
-                   years are BEFORE the x0.6 scaling: the card shows years x 0.6 so the parts add up to body_age - age
+  body_age        {body_age: float, age: float, pace: float (-1..3) | null, pace_reason: str | null,
+                   items: [{name, value, unit, target, years}], missing: [[name, reason]], model} | null
+                   the WHOOP-style Age (whoop_age.py): nine metrics in a fixed order, years as stored (they add up to
+                   body_age - age); a missing metric has value null and years 0
   journal         [{question, yes_n, no_n, yes_mean, no_mean, diff}]   (diff = yes_mean - no_mean)
   focus           str | null   one line for the coming week
 
 Rendering notes for the CLI: the daily headline is written here from zone, cap and the largest contributor (an
 illness_warning flag overrides it) and shows as a zone-coloured lead under the recovery ring with its detail below;
 the "your normal" band is drawn only when every day has centre and spread; stress hours missing between the first and
-last hour show as empty cells; best/worst day and focus are hidden when null; the Body Age "strength" note in missing
-is hidden when body_age is present; journal questions read "On days with <question>" ("late meal" and "stressful
+last hour show as empty cells; best/worst day and focus are hidden when null; journal questions read "On days with <question>" ("late meal" and "stressful
 day" have their own phrasing). Size: daily < 14 KB, weekly < 24 KB.
 """
 from __future__ import annotations
@@ -763,9 +761,8 @@ METRICS = [  # key, label, value formatter, delta formatter
     ("rhr", "Resting HR", lambda v: _unit(v, " bpm"), lambda d: _sg(d) + " bpm"),
     ("stress", "Stress", lambda v: _r(v, 1), lambda d: _sg(d, 1)),
 ]
-ITEM_NAMES = {"sleep_duration": "Sleep duration", "sleep_regularity": "Sleep regularity", "activity": "Activity",
-              "vo2max": "VO₂ max", "rhr": "Resting heart rate", "body_comp": "Body composition",
-              "steps": "Steps", "strength": "Strength training"}
+ITEM_NAMES = {"VO2 max": "VO₂ max", "Resting HR": "Resting heart rate", "Zones 1-3": "Zones 1–3",
+              "Zones 4-5": "Zones 4–5", "Strength": "Strength training"}
 JOURNAL_LEAD = {"late meal": "On days with a late meal", "stressful day": "On stressful days"}
 
 
@@ -858,31 +855,39 @@ def _gauge(pace: float | None) -> str:
             f'{track}{arc}{tick}{text}</svg>')
 
 
-def _item_value(name: str, v, strength_only: bool) -> str:
-    if _f(v) is None:
-        return DASH
-    return {
-        "sleep_duration": lambda: f"{_r(v, 1)} h a night",
-        "sleep_regularity": lambda: f"SRI {_r(_clamp(_f(v), 0, 100))}",
-        "activity": lambda: f"{_r(v)} min strength a week" if strength_only else f"{_r(v, comma=True)} steps a day",
-        "vo2max": lambda: f"{_r(v, 1)} ml/kg/min",
-        "rhr": lambda: f"{_r(v)} bpm",
-        "body_comp": lambda: f"BMI {_r(v, 1)}",
-    }.get(name, lambda: _r(v, 1))()
+def _metric(v, unit: str) -> str:
+    if unit == "%":
+        return f"{_r(v)}%"
+    if unit == "h":
+        return f"{_r(v, 1)} h"
+    if unit == "steps/day":
+        return f"{_r(v, comma=True)} steps/day"
+    if unit == "mL/kg/min":
+        return f"{_r(v, 1)} mL/kg/min"
+    return f"{_r(v)} {unit}".strip()
+
+
+def _item_value(it: dict) -> str:
+    unit = str(it.get("unit") or "")
+    v, t = _f(it.get("value")), _f(it.get("target"))
+    shown = DASH if v is None else _metric(v, unit)
+    return shown + (f", target {_metric(t, unit)}" if t is not None else "")
 
 
 def _body_age(ba) -> str:
-    """The weekly hero: Body Age against calendar age, Pace of Aging as a half ring, then what each habit adds."""
-    caveat = "Estimate from population research, not a medical test."
+    """The weekly hero: the WHOOP-style Age against calendar age, Pace of Aging as a half ring, then what each of the
+    nine metrics adds."""
+    caveat = "WHOOP-style estimate from population research, not a medical test."
+    title = '<div class="s">WHOOP-style Age</div>'
     if not isinstance(ba, dict):
-        return (f'<div class="hc"><div class="s">Body age</div><div class="hv" style="color:{MIST}">{DASH}</div>'
+        return (f'<div class="hc">{title}<div class="hv" style="color:{MIST}">{DASH}</div>'
                 f'<div class="s" style="margin-top:8px">Not enough history yet</div></div>')
     value, age, pace = _f(ba.get("body_age")), _f(ba.get("age")), _f(ba.get("pace"))
     missing = [m for m in _l(ba.get("missing")) if isinstance(m, (list, tuple)) and len(m) == 2]
     miss = "".join(f'<div class="m">Not counted: {_e(ITEM_NAMES.get(m[0], m[0]))} — '
-                   f'{_e(str(m[1]).replace(">=", "≥"))}</div>' for m in missing if value is None or m[0] != "strength")
+                   f'{_e(str(m[1]).replace(">=", "≥"))}</div>' for m in missing)
     if value is None:
-        return (f'<div class="hc"><div class="s">Body age</div><div class="hv" style="color:{MIST}">{DASH}</div>'
+        return (f'<div class="hc">{title}<div class="hv" style="color:{MIST}">{DASH}</div>'
                 f'<div class="s" style="margin:8px 0 16px">Not enough history yet for an estimate</div></div>'
                 + miss + f'<div class="m" style="margin-top:6px">{caveat}</div>')
     diff = value - age if age is not None else None
@@ -893,32 +898,28 @@ def _body_age(ba) -> str:
     else:
         vs = (f'<div class="hl {"c1" if diff < 0 else "c3"}" style="margin-top:8px">{_r(abs(diff), 1)} years '
               f'{"younger" if diff < 0 else "older"}</div><div class="s">than your calendar age of {_r(age, 1)}</div>')
-    pace_word = ("Needs 8 weekly snapshots" if pace is None else "Ageing slower than the calendar" if pace < 1
+    reason = str(ba.get("pace_reason") or "needs 21 of the last 30 days with sleep data").replace(">=", "≥")
+    pace_word = (reason[:1].upper() + reason[1:] if pace is None else "Ageing slower than the calendar" if pace < 1
                  else "Ageing faster than the calendar" if pace > 1 else "Ageing at calendar pace")
-    hero = (f'<div class="hc"><div class="s">Body age</div><div class="hv">{_r(value, 1)}</div>{vs}'
+    hero = (f'<div class="hc">{title}<div class="hv">{_r(value, 1)}</div>{vs}'
             f'<div class="ga">{_gauge(pace)}<div class="gc"><div class="w">{_unit(pace, "×", 1)}</div>'
-            f'<div class="x">Pace of aging</div></div></div><div class="s" style="margin-top:10px">{pace_word}</div></div>')
-    strength_only = any(m[0] == "steps" for m in missing)
+            f'<div class="x">Pace of aging</div></div></div><div class="s" style="margin-top:10px">{_e(pace_word)}</div></div>')
     items = [it for it in _l(ba.get("items")) if isinstance(it, dict) and _f(it.get("years")) is not None]
     rows = []
     for it in items:
-        y = _f(it["years"]) * 0.6
+        y = _f(it["years"])
         name = str(it.get("name"))
         tone = "c1" if y <= -0.05 else "c3" if y >= 0.05 else ""
         rows.append(f'<span class="el">{_e(ITEM_NAMES.get(name, name))}<div class="m el">'
-                    f'{_item_value(name, it.get("value"), strength_only)}</div></span><b class="n r {tone}">{_sg(y, 1)} yr'
+                    f'{_e(_item_value(it))}</div></span><b class="n r {tone}">{_sg(y, 1)} yr'
                     f'</b>{_diverge(y, 2.4, good_right=False)}')
     add = ""
     if items and diff is not None:
-        total = sum(_f(it["years"]) * 0.6 for it in items)
-        if abs(total - diff) > 0.05:
-            add = f"Items sum to {_sg(total, 1)} years; the total is capped at ±10. "
-        else:
-            shown = sum(Decimal(_r(_f(it["years"]) * 0.6, 1).replace(MINUS, "-")) for it in items)
-            approx = shown != Decimal(_r(diff, 1).replace(MINUS, "-"))
-            add = f"Items add up to {_sg(diff, 1)} years{' (approx., rounded)' if approx else ''}. "
-    body = (f'<div class="s" style="margin:20px 0 8px">Years each habit adds (right) or takes off (left)</div>'
-            f'<div class="ib">{"".join(rows)}</div>' if rows else "")
+        shown = sum(Decimal(_r(_f(it["years"]), 1).replace(MINUS, "-")) for it in items)
+        approx = shown != Decimal(_r(diff, 1).replace(MINUS, "-"))
+        add = f"Metrics add up to {_sg(diff, 1)} years{' (approx., rounded)' if approx else ''}. "
+    body = (f'<div class="s" style="margin:20px 0 8px">Years each metric adds (right) or takes off (left), '
+            f'against the WHOOP-style targets</div><div class="ib">{"".join(rows)}</div>' if rows else "")
     return (hero + f'<div>{body}<div class="m" style="margin-top:10px">{add}{caveat}</div>{miss}</div>')
 
 
@@ -1056,7 +1057,7 @@ def weekly_card(result: dict) -> str:
             + f", {we.year}") if ws and we else f"Week of {DASH}"
     ba = _d(r.get("body_age"))
     summary = (f"Weekly recovery report for the {span[0].lower() + span[1:]}: recovery average {_r(a)}, "
-               f"body age {_r(ba.get('body_age'), 1)}, pace of aging {_r(ba.get('pace'), 1)}.")
+               f"WHOOP-style age {_r(ba.get('body_age'), 1)}, pace of aging {_r(ba.get('pace'), 1)}.")
     header = f'<div class="s">{_e(span)}</div><div class="hl" style="margin-top:4px">{_e(headline)}</div>'
     focus = r.get("focus")
     focus_html = (f'<div class="tl" style="margin-top:16px"><div class="s">Focus for the coming week</div>'

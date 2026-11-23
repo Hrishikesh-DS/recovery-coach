@@ -25,6 +25,8 @@ Written into DIR, in the formats of inputs.py, over the span ending U = --until 
                 lower camel as the Health tool returns it (running, traditionalStrengthTraining, walking, other);
                 kcal = active energy (old exports: totalEnergyBurned); avg_hr = the workout's heart-rate statistic
                 average when it has one, else the mean heart rate of the minutes inside it.
+  body.csv      U-days+1 .. U: lean body mass % per day with a reading (100 x (1 - body fat), else lean / body mass,
+                the day's latest of each), for the WHOOP-style Age; header only when there is none.
   vitals.json   {}
 state.json is not touched (the caller writes it).
 

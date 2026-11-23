@@ -1,10 +1,10 @@
 # recovery-coach
 
-Whoop-style **Recovery, Strain, Sleep, Stress, training load and Body Age** from an Apple Watch — computed by a small, zero-dependency Python engine and shown as a daily card inside Claude.
+Whoop-style **Recovery, Strain, Sleep, Stress, training load and a WHOOP-style Age** from an Apple Watch — computed by a small, zero-dependency Python engine and shown as a daily card inside Claude.
 
 Built for an Apple Watch Ultra 2 (no Apple Readiness score on that model), but it works with any Apple Watch that records HRV, heart rate and sleep stages.
 
-> Not a medical device and not medical advice. Scores are personal trend estimates; Body Age is a habit-based estimate from population research, not a medical test.
+> Not a medical device and not medical advice. Scores are personal trend estimates; the WHOOP-style Age is a habit-based estimate from population research, not a medical test.
 
 ## What it computes
 
@@ -17,7 +17,7 @@ Built for an Apple Watch Ultra 2 (no Apple Readiness score on that model), but i
 | Training load | CTL / ATL / TSB, ACWR | Fitness (42-day), fatigue (7-day), form, and an acute:chronic ratio flag for spikes or detraining. |
 | Stress | 0–3 | Heart rate during still, awake hours against your 14-day baseline, blended with daytime HRV when present. |
 | Health monitor | flags | HRV, sleeping HR, breathing rate, SpO₂ and wrist temperature against your normal; two or more out of range raises a "possible illness or strain" flag. |
-| Body Age and Pace of Aging | years, −1×…3× | openbodyscore healthspan v1.2: sleep duration, sleep regularity, steps + strength, VO₂ max, resting HR (and BMI if available), each converted to years through published mortality curves. |
+| WHOOP-style Age and Pace of Aging | years, −1×…3× | The method of WHOOP's 2025 Healthspan white paper: hours of sleep, sleep consistency, steps, time in heart-rate zones 1–3 and 4–5 (logged workouts), strength minutes, VO₂ max, resting HR during sleep and lean body mass %, each scored against WHOOP's target and converted to years (10 × ln HR) over 6 months; Pace from the last 30 days. Curves from the studies the paper cites, overlap factor fitted to its worked examples (`recovery_coach/whoop_age.py`). |
 | Workouts | per session | Training effect 0–5 and recovery hours (approx, open EPOC model), heart-rate recovery at 1 and 2 minutes from raw heart rate, HRSS, Banister TRIMP, zones, intensity, Active Zone Minutes, session RPE, and how the session compares with your usual. Runs add efficiency and heart-rate drift, VO₂ max from the run (Runalyze / Daniels), a Polar-style running index, mechanics, best efforts and splits. |
 | Training | daily and weekly | Form %, ramp, easy-day cap, monotony and training strain, Polar and Garmin load-ratio bands, intensity split and polarization, HRV status, a training status label (approx), the Oura-style Recovery Index, race predictions, training paces and critical speed. |
 | Journal | associations | Yes/no habits (alcohol, late caffeine, …) compared with next-morning recovery once there are ≥ 5 days each way. |
@@ -69,7 +69,8 @@ The repository contains code and synthetic fixtures only — never real health d
 
 This project re-implements published methods and ports tables from:
 
-- **openbodyscore / Watch2Whoop** (Apache-2.0) — recovery, strain, sleep-need and healthspan methodology; v1.2 healthspan tables ported verbatim in `recovery_coach/healthspan_tables.py` (see its header and `tests/fixtures/healthspan_v12.NOTICE`).
+- **openbodyscore / Watch2Whoop** (Apache-2.0) — recovery, strain and sleep-need methodology.
+- **WHOOP 2025 white paper "The WHOOP Healthspan Feature"** — the framework, metrics and targets of the WHOOP-style Age (re-implemented; WHOOP's own curves and overlap factors are not published).
 - **OpenReadiness** (MIT) — missing-signal weight redistribution and limiting-factor caps.
 - **ridgwayb/readiness** — one-directional breathing-rate and temperature deviations.
 - **Open Wearables** (MIT) — sleep-quality components.

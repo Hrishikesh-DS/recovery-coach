@@ -95,8 +95,8 @@ def heavy_weekly(weekly):
     j = w["journal"][0]
     w["journal"] = [dict(j, question=q) for q in
                     ("alcohol", "caffeine after 2 pm", "late meal", "screens in bed", "stressful day")]
-    w["body_age"]["missing"] = [[n, "only 12 days of data in 180 days (need >= 30)"] for n in
-                                ("vo2max", "body_comp", "steps")]
+    w["body_age"]["missing"] = [[n, "only 12 days of data in 182 (need >= 30)"] for n in
+                                ("VO2 max", "Lean body mass", "Steps")]
     return w
 
 
@@ -122,7 +122,7 @@ class _Balance(HTMLParser):
         self.stack.pop()
 
 
-ACRONYMS = {"HRV", "REM", "SRI", "BMI", "HIIT", "ACWR"}
+ACRONYMS = {"HRV", "REM", "SRI", "BMI", "HIIT", "ACWR", "WHOOP"}   # WHOOP: only in "WHOOP-style"
 # the fixed palette: the card looks the same on a light or a dark host
 PALETTE = {"#0D1218", "#151C24", "#232D38", "#EDF1F5", "#8F9BA8", "#5F6B78", "#34E089", "#F5C542", "#FF5468",
            "#3EA6FF", "#9A8CFF", "#FF8FAB", "#FF7A45", *STRESS_RAMP}
@@ -141,7 +141,7 @@ def visible_text(html):
 
 
 def check_host_rules(html):
-    low = html.lower()
+    low = html.lower().replace("whoop-style", "")      # the age's name; no other brand mention
     for banned in ("http://", "https://", "<script", "@import", "<!--", "/*", "xmlns", "url(", "@font-face",
                    "<!doctype", "<html", "<head", "<body", "display:none", "display: none", "whoop",
                    "var(--",                                            # no host theme variables: fixed palette
@@ -251,7 +251,7 @@ def test_no_external_refs(daily, weekly):
 
 def test_no_brand_terms(daily, weekly):
     assert "whoop" not in daily_card(daily).lower()
-    assert "whoop" not in weekly_card(weekly).lower()
+    assert "whoop" not in weekly_card(weekly).lower().replace("whoop-style", "")   # only the age's own name
 
 
 def test_values_present(daily):
@@ -387,39 +387,39 @@ def test_weekly_values_present(weekly):
               "51 bpm",                             # resting HR average
               "86", "38",                           # best and worst day
               "HRV 74 ms, highest in 3 weeks",      # why
-              "28.7", "−1.9 years",                 # body age and difference
+              "WHOOP-style Age", "28.7", "−1.9 years",   # the age and difference
               "0.8×",                               # pace of aging
-              "−0.7", "−0.9", "+0.2",               # item years x 0.6 (activity, VO2 max, regularity)
-              "approx.",                            # rounded parts do not add up exactly
+              "−0.7", "+0.6", "−0.6",               # item years as stored (zones 4-5, VO2 max, resting HR)
+              "62 min/week", "target 10",           # a value with its unit and WHOOP's target
+              "Not counted: Lean body mass",        # a missing metric says why
               "On days with alcohol, next-morning recovery averaged 15 points lower",
               "Protect sleep before hard sessions"):
         assert s in html, s
     assert "estimate from population research, not a medical test" in html.lower()
 
 
-def test_weekly_hides_strength_note_when_body_age_present(weekly):
-    assert "since strength records began" not in weekly_card(weekly)
-    weekly["body_age"]["body_age"] = None
-    weekly["body_age"]["items"] = []
-    assert "since strength records began" in weekly_card(weekly)
-
-
 def test_weekly_parts_add_up_exactly_no_approx(weekly):
     ba = weekly["body_age"]
-    ba["items"] = [{"name": "rhr", "value": 52, "years": -1.0}, {"name": "vo2max", "value": 49, "years": 0.5}]
-    ba["body_age"] = ba["age"] - 0.3
+    ba["items"] = [{"name": "Resting HR", "value": 52, "unit": "bpm", "target": 60, "years": -1.0},
+                   {"name": "VO2 max", "value": 49, "unit": "mL/kg/min", "target": 44, "years": 0.5}]
+    ba["body_age"] = ba["age"] - 0.5
     html = weekly_card(weekly)
     assert "approx." not in html
-    assert "−0.6" in html and "+0.3" in html
+    assert "−1.0" in html and "+0.5" in html
 
 
-def test_weekly_sri_clamped_for_display(weekly):
-    for item in weekly["body_age"]["items"]:
-        if item["name"] == "sleep_regularity":
-            item["value"] = -12.3
-    html = weekly_card(weekly)
-    assert "SRI 0" in html
-    assert "SRI −12" not in html
+def test_weekly_rounded_parts_say_approx(weekly):
+    ba = weekly["body_age"]
+    ba["items"] = [{"name": "Resting HR", "value": 52, "unit": "bpm", "target": 60, "years": -0.04},
+                   {"name": "VO2 max", "value": 49, "unit": "mL/kg/min", "target": 44, "years": -0.04}]
+    ba["body_age"] = ba["age"] - 0.08
+    assert "approx." in weekly_card(weekly)
+
+
+def test_weekly_pace_reason_shown_when_pace_withheld(weekly):
+    weekly["body_age"]["pace"] = None
+    weekly["body_age"]["pace_reason"] = "only 12 of the last 30 days have sleep data (need >= 21)"
+    assert "Only 12 of the last 30 days have sleep data (need ≥ 21)" in weekly_card(weekly)
 
 
 def test_weekly_mostly_null_renders_dash():

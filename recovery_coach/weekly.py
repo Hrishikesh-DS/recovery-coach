@@ -1,15 +1,14 @@
-"""The weekly report (spec 5.8): the week ending on a date vs the 4 weeks before, with Body Age and Pace of Aging.
+"""The weekly report (spec 5.8): the week ending on a date vs the 4 weeks before, with the WHOOP-style Age and Pace.
 
 weekly_report(state, as_of, vitals, long) -> {"card": <weekly card dict, card.py schema>,
                                                "week": {date, delta, items, body_age, pace},
                                                "state_long_next": <long state, state.py>}.
 state is the daily state (state.json), long the long state (state_long.json, optional); their rows are merged by
 date, the daily state winning where both hold a date. The week is as_of - 6 .. as_of (default as_of: the latest
-row's date; on Mondays the skill passes yesterday). "week" is this report's Body Age snapshot (delta = body age -
-age, items = the Body Age items it counted); state_long_next is the merged rows with that snapshot added (the skill
-stores it after the Monday report, so Pace of Aging can use it).
-Pace of Aging uses only the trailing run of snapshots computed from the same items as the latest one: an item
-joining once its data reaches 30 days changes the measurement, not the person (8 such snapshots needed).
+row's date; on Mondays the skill passes yesterday). "week" is this report's age snapshot (delta = WHOOP-style age -
+age, items = the metrics it counted); state_long_next is the merged rows with that snapshot added (the chart's
+history). Age and Pace come from whoop_age.py: Pace from the last 30 days against the 182-day window, not from the
+snapshots. vitals (weight, height) is accepted and unused since the WHOOP model has no BMI item.
 """
 from __future__ import annotations
 
@@ -17,7 +16,6 @@ import math
 import statistics
 from datetime import date, timedelta
 
-from .healthspan import BodyAgeResult, body_age, pace_of_aging
 from .inputs import DayRow, InputError, State, Vitals, Week
 from .journal import habit_effects
 from .load import SPIKE_ABOVE
@@ -25,21 +23,24 @@ from .pipeline import age_on, window
 from .recovery import recovery_score
 from .sleep import LATENCY_MIN
 from .state import long_state, merge_states
+from .whoop_age import MODEL, WhoopAge, whoop_age
 from . import race, running, session, training
 
 WEEK = 7
 PRIOR_DAYS = 28
 SERIES_DAYS = 28
 VO2_DAYS = 180
-BODY_DAYS = 180
 DEBT_FOCUS_MIN = 60   # my call: more sleep debt than this makes sleep the week's focus
-FOCUS_ITEM = {   # my call: one line per Body Age item, for the item adding the most years
-    "sleep_duration": "Sleep longer: 7-8 hours of sleep a night is the habit adding the most years right now.",
-    "sleep_regularity": "Keep a steady schedule: bed and wake times within 30 minutes every day, weekends included.",
-    "activity": "Move more: build toward 8,000+ steps a day, with two strength sessions a week.",
-    "vo2max": "Build fitness: one interval session a week is the surest way to lift VO₂ max.",
-    "rhr": "Bring resting heart rate down: more easy aerobic minutes and steady sleep.",
-    "body_comp": "Body composition adds the most years: small, steady changes to food and activity.",
+FOCUS_ITEM = {   # my call: one line per metric, for the metric adding the most years
+    "Hours of sleep": "Sleep longer: at least 7 hours a night is the habit adding the most years right now.",
+    "Sleep consistency": "Keep a steady schedule: bed and wake times within 30 minutes every day, weekends included.",
+    "Steps": "Move more: build toward 8,000+ steps a day.",
+    "Zones 1-3": "More easy cardio: aim for 100+ minutes a week in heart-rate zones 1-3.",
+    "Zones 4-5": "Add some intensity: 10+ minutes a week in zones 4-5, such as short intervals.",
+    "Strength": "Add strength training: 40+ minutes a week.",
+    "VO2 max": "Build fitness: one interval session a week is the surest way to lift VO₂ max.",
+    "Resting HR": "Bring resting heart rate down: more easy aerobic minutes and steady sleep.",
+    "Lean body mass": "Body composition adds the most years: strength training and small, steady changes to food.",
 }
 
 
@@ -86,9 +87,9 @@ def _clock(minutes: float) -> str:
     return f"{h % 12 or 12}:{mm:02d} {'am' if h < 12 else 'pm'}"
 
 
-def focus(rows: list[DayRow], ba: BodyAgeResult, goal_min: float) -> str | None:
-    """One line for the coming week (my call): sleep debt first, then a load spike, then the Body Age item adding
-    the most years; None when nothing stands out."""
+def focus(rows: list[DayRow], ba: WhoopAge, goal_min: float) -> str | None:
+    """One line for the coming week (my call): sleep debt first, then a load spike, then the metric adding the most
+    years; None when nothing stands out."""
     if not rows:
         return None
     last = rows[-1]
@@ -102,27 +103,6 @@ def focus(rows: list[DayRow], ba: BodyAgeResult, goal_min: float) -> str | None:
                 f"between hard sessions.")
     worst = max((i for i in ba.items if i.years > 0), key=lambda i: i.years, default=None)
     return FOCUS_ITEM.get(worst.name) if worst is not None else None
-
-
-def pace_points(weeks: list[Week], current: Week) -> list[float | None]:
-    """The deltas Pace of Aging may use: the trailing run of snapshots whose item set equals the latest one's (the
-    current snapshot replaces a stored one of the same date; snapshots without items never join), placed on a weekly
-    grid from the run's first snapshot (nearest week; the later date wins a shared slot; None = a week without one)."""
-    by = {w.date: w for w in weeks}
-    by[current.date] = current
-    ordered = sorted(by.values(), key=lambda w: w.date)
-    target = ordered[-1].items
-    run: list[Week] = []
-    for w in reversed(ordered):
-        if target is None or w.items is None or set(w.items) != set(target):
-            break
-        run.append(w)
-    run = run[::-1] or [ordered[-1]]
-    d0 = run[0].date
-    slots = {}
-    for w in run:
-        slots[round((w.date - d0).days / 7)] = w.delta
-    return [slots.get(i) for i in range(max(slots) + 1)]
 
 
 def _race(log, end: date) -> dict:
@@ -204,16 +184,15 @@ def weekly_report(state: State, as_of: date | None = None, vitals: Vitals | None
                     "tsb": by[d].tsb if d in by else None} for d in dates]
 
     age = age_on(s.dob, end)
-    weight = (vitals.weight_kg if vitals and vitals.weight_kg else None) or s.weight_kg
-    height = (vitals.height_m if vitals and vitals.height_m else None) or s.height_m
-    ba = body_age(age, s.sex, window(rows, after, BODY_DAYS), weight, height)
-    delta = round(ba.body_age - age, 2) if ba.body_age is not None else None
-    snapshot = Week(end, delta, tuple(i.name for i in ba.items))
-    pace = pace_of_aging(pace_points(snapshots, snapshot))
-    body = {"body_age": round(ba.body_age, 2) if ba.body_age is not None else None, "age": round(age, 2),
-            "pace": pace, "items": [{"name": i.name, "value": round(i.value, 2) if i.value is not None else None,
-                                     "years": round(i.years, 2)} for i in ba.items],
-            "missing": [[n, why] for n, why in ba.missing]}
+    ba = whoop_age(rows, end, age, s.sex)
+    delta = round(ba.delta, 2)
+    counted = tuple(i.name for i in ba.items if i.name not in {n for n, _ in ba.missing})
+    snapshot = Week(end, delta, counted)
+    pace = round(ba.pace, 2) if ba.pace is not None else None
+    body = {"body_age": round(ba.body_age, 2), "age": round(age, 2), "pace": pace, "pace_reason": ba.pace_reason,
+            "items": [{"name": i.name, "value": round(i.value, 2) if i.value is not None else None, "unit": i.unit,
+                       "target": round(i.target, 1), "years": round(i.years, 2)} for i in ba.items],
+            "missing": [[n, why] for n, why in ba.missing], "model": MODEL}
     questions = s.questions or sorted({q for r in rows for q in r.journal})
     journal = [{"question": e.question, "yes_n": e.yes_n, "no_n": e.no_n, "yes_mean": round(e.yes_mean, 1),
                 "no_mean": round(e.no_mean, 1), "diff": round(e.diff, 1)} for e in habit_effects(rows, questions)]

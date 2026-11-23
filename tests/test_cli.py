@@ -104,16 +104,15 @@ def test_e2e_synthetic(chain):
         assert w["state_long_next"]["cols"]["date"][0] == gen.day_date(1).isoformat()   # nothing lost
         assert w["state_long_next"]["cols"]["date"][-1] == gen.day_date(n).isoformat()
 
-    # weekly report: body age with a pace from 8+ snapshots sharing one item set, card small
+    # weekly report: the WHOOP-style Age with its nine metrics and a 30-day Pace, card small
     weekly = res["weekly"]["card"]
     assert weekly["week_end"] == gen.day_date(90).isoformat()
-    assert weekly["body_age"]["body_age"] is not None
-    assert {i["name"] for i in weekly["body_age"]["items"]} >= {"sleep_duration", "activity", "rhr", "vo2max"}
+    assert weekly["body_age"]["body_age"] is not None and weekly["body_age"]["model"] == "whoop-v1"
+    assert len(weekly["body_age"]["items"]) == 9
+    assert {"Hours of sleep", "Steps", "Resting HR"} <= set(res["weekly"]["week"]["items"])
     weeks = res["state_long"]["weeks"]
-    full = set(res["weekly"]["week"]["items"])
-    assert set(weeks[0]["items"]) < full                  # the first snapshot lacked an item (no 30 nights of SRI)
-    assert sum(set(w["items"]) == full for w in weeks) >= 8
-    assert -1 < weekly["body_age"]["pace"] < 3            # no longer pinned at the -1x clip by that early drift
+    assert weeks and all(w["items"] for w in weeks)
+    assert -1 <= weekly["body_age"]["pace"] <= 3
     assert weekly["worst_day"] is not None and weekly["best_day"] is not None
     html = (work / "weekly090" / "out" / "weekly.html").read_text()
     assert html == weekly_card(weekly) and len(html.encode()) < WEEKLY_LIMIT

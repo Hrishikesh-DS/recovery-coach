@@ -5,7 +5,7 @@ Two documents keep every morning small (spec 3, the courier budget):
   what `run` reads (recovery and monitor baselines 60 days, load 29, stress 15) and, for the same 60 days, the
   fields only `weekly` reads: the days since the last weekly live only here until `weekly` folds them in;
 - the long state (state_long.json; `weekly` and `backfill` return it as "state_long_next"): up to LONG_DAYS days
-  and the last KEEP_WEEKS weekly Body Age snapshots, no settings. `weekly` merges it with the daily state, the daily
+  and the last KEEP_WEEKS weekly WHOOP-style Age snapshots, no settings. `weekly` merges it with the daily state, the daily
   state winning on dates both hold.
 The format is documented in inputs.py (read_state). In both documents:
 - only fields some command reads, each kept for as many recent days as its readers look back (STATE_FIELDS, capped
@@ -28,7 +28,7 @@ DAILY_DAYS = 60
 LONG_DAYS = 180
 KEEP_WEEKS = 30   # Pace of Aging: 26 points after a 4-week moving average
 # field: (decimals, most recent days kept) -- the days each field's readers need, counted back from the latest row
-#   60: recovery and health-monitor baselines; 180: Body Age (sleep, regularity, steps, strength, VO2 max, resting HR)
+#   60: recovery and health-monitor baselines; 180: WHOOP-style Age (sleep, consistency, steps, zones, strength, VO2 max, sleeping HR, lean mass)
 #   and journal effects (with recovery); 36: weekly averages (week + 4 weeks before, ending the day before the
 #   latest row); 29: training load chart and the 28-day load ratio; 15: stress baseline; 8: weekly focus and flags
 STATE_FIELDS: dict[str, tuple[int | None, int]] = {

@@ -36,7 +36,7 @@ state.json      the daily state: the previous run's "state_next", copied verbati
               ones are null). Journal answers: one column per question, "journal:<question>", 1 / 0 / null.
     rows      one object per date with DayRow's keys (a missing key = null), in any order
     In both forms a missing zone is derived from recovery, and a missing tsb from ctl - atl.
-    weeks     weekly Body Age snapshots [{"date", "delta" (body age - age), "items": [item names]}] (items may be
+    weeks     weekly WHOOP-style Age snapshots [{"date", "delta" (age estimate - age), "items": [item names]}] (items may be
               missing in old snapshots); used by `weekly`
 state_long.json the long state (`weekly` only, optional): the last weekly's or backfill's "state_long_next",
     {"cols": {...}, "weeks": [...], "crc": n} (up to 180 days; settings are taken from state.json; crc as above).
@@ -308,7 +308,7 @@ class Settings:
 
 @dataclass
 class Week:
-    """A weekly Body Age snapshot: body age - age, and which items it was computed from (None: unknown)."""
+    """A weekly WHOOP-style Age snapshot: estimate - age, and which items it was computed from (None: unknown)."""
     date: date
     delta: float | None
     items: tuple[str, ...] | None = None
