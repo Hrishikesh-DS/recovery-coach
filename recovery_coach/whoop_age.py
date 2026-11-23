@@ -9,7 +9,8 @@ sleep metrics, is fitted to the paper's Table 2 worked examples (tests/test_whoo
 Window: the 182 days ending on as_of, plain means. A metric with fewer than 30 days of data counts 0 years and is listed
 missing (VO2 max: >= 2 readings with the latest within 120 days; lean mass: the latest value within 90 days).
 Pace of Aging = 1 + (total from the last 30 days - total from 182 days) / 0.5, clipped to [-1, 3]: the last 30 days held
-for 6 months against today. VO2 max and lean mass, measured only now and then, take the same value in both totals.
+for 6 months against today. Both totals use only the metrics present in both windows (a metric counted in one total
+only would move Pace by itself), and VO2 max and lean mass, measured only now and then, take the same value in both.
 """
 from __future__ import annotations
 
@@ -159,7 +160,7 @@ def _jaccard(a: tuple[float, float], b: tuple[float, float]) -> float | None:
     return max(0.0, min(a[1], b[1]) - max(a[0], b[0])) / union
 
 
-def _night_scores(rows: list[DayRow]) -> list[float]:
+def _night_scores(rows: list[DayRow]) -> list[tuple[date, float]]:
     by = {date.fromisoformat(r.date): r for r in rows if r.onset_min is not None and r.wake_min is not None}
     scores = []
     for d in sorted(by):
@@ -168,14 +169,14 @@ def _night_scores(rows: list[DayRow]) -> list[float]:
                 for p in (d - timedelta(days=k) for k in range(1, CONSISTENCY_PRIOR_NIGHTS + 1)) if p in by]
         sims = [s for s in sims if s is not None]
         if len(sims) >= CONSISTENCY_MIN_PRIOR:
-            scores.append(100.0 * sum(sims) / len(sims))
+            scores.append((d, 100.0 * sum(sims) / len(sims)))
     return scores
 
 
 def consistency(rows: list[DayRow]) -> float | None:
     """WHOOP-like sleep consistency, 0-100%: per night, the mean overlap (intersection / union) of its [onset, wake]
     window with each of the previous 4 nights that have times (at least 2), then the mean over nights."""
-    scores = _night_scores(rows)
+    scores = [sc for _, sc in _night_scores(rows)]
     return sum(scores) / len(scores) if scores else None
 
 
@@ -197,7 +198,9 @@ def _values(rows: list[DayRow], as_of: date, days: int, min_days: int) -> tuple[
         return sum(v) / len(v) * (7.0 if weekly else 1.0) * scale
 
     values["sleep_h"] = mean("Hours of sleep", "sleep_min", 1 / 60)
-    nights = _night_scores(w)
+    first = as_of - timedelta(days=days - 1)
+    upto = [r for r in rows if r.date <= as_of.isoformat()]      # a window's first nights compare with earlier ones
+    nights = [sc for d, sc in _night_scores(upto) if first <= d <= as_of]
     if len(nights) < min_days:
         missing.append(("Sleep consistency", f"only {len(nights)} nights with sleep times (need >= {min_days})"))
         values["consistency"] = None
@@ -243,6 +246,12 @@ def whoop_age(rows: list[DayRow], as_of: date, age: float, sex: str, days: int =
         return out
     v30, _ = _values(rows, as_of, PACE_DAYS, PACE_MIN_DAYS)
     v30["vo2"], v30["lbm"] = values["vo2"], values["lbm"]
-    t30 = sum(metric_years(v30, age, sex).values())
-    out.pace = min(max(1 + (t30 - delta) / 0.5, PACE_RANGE[0]), PACE_RANGE[1])
+    both = [k for k in KEYS.values() if values[k] is not None and v30[k] is not None]   # the same metrics in both
+    if not both:
+        out.pace_reason = "not enough history yet: no metric has 6 months and 30 days of data"
+        return out
+    pick = lambda v: {k: v[k] for k in both}   # noqa: E731
+    t182 = sum(metric_years(pick(values), age, sex).values())
+    t30 = sum(metric_years(pick(v30), age, sex).values())
+    out.pace = min(max(1 + (t30 - t182) / 0.5, PACE_RANGE[0]), PACE_RANGE[1])
     return out

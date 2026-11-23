@@ -128,7 +128,7 @@ def test_csv_values(tmp_path):
     ({"resp": 50}, "resp"), ({"spo2": 60}, "spo2"), ({"spo2": 0.5}, "spo2"), ({"wtemp": 45}, "wtemp"),
     ({"weight_kg": 300}, "weight_kg"), ({"height_m": 178}, "height_m"), ({"vo2": 5}, "vo2"),
     ({"rhr": "55"}, "rhr"), ({"resp_rate": 15}, "resp_rate"), ({"exercise_min_yesterday": -1}, "exercise"),
-    ({"lbm_pct": 101}, "lbm_pct"), ({"lbm_pct": 0.77}, "lbm_pct"),
+    ({"lbm_pct": 101}, "lbm_pct"), ({"lbm_pct": 0.77}, "lbm_pct"), ({"lbm_pct": 99.8}, "lbm_pct"),
 ])
 def test_vitals_validation(tmp_path, vitals, words):
     with pytest.raises(InputError) as e:

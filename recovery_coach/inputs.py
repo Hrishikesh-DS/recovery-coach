@@ -61,11 +61,14 @@ workouts.csv    start,end,kind,kcal,avg_hr
     Workouts that started D 00:00 -> now. kind = the HealthKit activity type (running,
     traditionalStrengthTraining, other, ...). kcal (>= 0) and avg_hr (25-250) may be empty.
 vitals.json
-    {"resp", "spo2", "wtemp", "rhr", "vo2", "exercise_min_yesterday", "weight_kg", "height_m"}, each a number or
+    {"resp", "spo2", "wtemp", "rhr", "vo2", "exercise_min_yesterday", "weight_kg", "height_m", "lbm_pct"}, each a
+    number or
     null (a missing key = null): last night's respiratory rate (4-40 /min), SpO2 (70-100 %; a 0.70-1.00 fraction is
     converted), wrist temperature (30-42, Celsius only), today's Apple resting HR (25-250 bpm), a VO2 max reading
     from yesterday (10-90), yesterday's exercise minutes (0-1440), weight (30-250, kg only) and height (1.2-2.3,
-    metres only; a value in cm is rejected). Convert before writing: a weight in pounds (e.g. 165) also lies inside
+    metres only; a value in cm is rejected) and a lean body mass % reading taken today only (30-97: 100 x (1 - body
+    fat fraction), or lean / body mass x 100; it is stored on today's row, so an older reading must not be resent).
+    Convert before writing: a weight in pounds (e.g. 165) also lies inside
     the kg range, so it can't be caught here; the courier divides pounds by 2.2046 (likewise F -> C, cm or ft/in -> m).
 journal.json
     {"date": "YYYY-MM-DD", "answers": {question: true|false}}: answers about behaviour on that date.
@@ -351,7 +354,7 @@ WTEMP = (30, 42)
 WEIGHT = (30, 250)
 HEIGHT = (1.2, 2.3)
 VO2 = (10, 90)
-LBM = (30, 100)
+LBM = (30, 97)   # % of body mass; 97+ means a body-fat fraction was subtracted from 100
 DAY_MIN = (0, 1440)
 HOUR_STEPS = (0, 30_000)
 DAY_STEPS = (0, 200_000)

@@ -332,8 +332,11 @@ def rebuilt(tmp_path_factory):
                            str(work / "bf"), "--date", U.isoformat()], cwd=ROOT).returncode == 0
     rows = [row_from_dict(r) for r in json.loads((work / "bf" / "result.json").read_text())["rows"]]
     live = U - _td(days=2)
+    old = {r.date for r in rows[:-60]}
     for r in rows:                                  # the stored history: written before the new columns existed
         r.z13_min = r.z45_min = r.lbm_pct = None
+        if r.date in old:
+            r.sleep_hr = None                       # main kept sleeping HR for 60 days only
         if r.date == live.isoformat():
             r.z13_min = 99.0                        # a value a live morning stored: must survive
     s = Settings(dob=_date(1990, 6, 15), sex="male")
@@ -356,6 +359,8 @@ def test_rebuild_age_keeps_live_values_and_fills_the_rest(rebuilt):
     assert daily[(U - _td(days=5)).isoformat()].lbm_pct == 77.2
     long = read_state_long(out / "state_long.json")
     assert {r.date for r in long.rows} >= set(daily)
+    oldest = min(long.rows, key=lambda r: r.date)
+    assert oldest.sleep_hr is not None                                  # sleeping HR filled beyond 60 days
 
 
 def test_rebuild_age_days_patch_lists_only_filled_values(rebuilt):
@@ -370,7 +375,7 @@ def test_rebuild_age_weeks_end_on_the_sunday_with_the_new_model(rebuilt):
     weeks = json.loads((out / "weeks.json").read_text())
     assert 1 <= len(weeks) <= 30 and weeks[-1]["date"] == SUNDAY.isoformat()
     assert all(_date.fromisoformat(w["date"]).weekday() == 6 and w["items"] for w in weeks)
-    assert all(set(w) == {"date", "body_age", "age", "pace", "items", "journal"} for w in weeks)
+    assert all(set(w) == {"date", "body_age", "age", "pace", "items"} for w in weeks)   # journal left as stored
     long_weeks = read_state_long(out / "state_long.json").weeks
     assert [w.date.isoformat() for w in long_weeks] == [w["date"] for w in weeks]
     assert long_weeks[-1].delta == pytest.approx(weeks[-1]["body_age"] - weeks[-1]["age"], abs=0.02)

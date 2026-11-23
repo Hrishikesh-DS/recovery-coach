@@ -143,3 +143,22 @@ def test_pace_withheld_with_thin_last_month():
         r.sleep_min = None
     out = wa.whoop_age(rows, END, 30.0, "male")
     assert out.pace is None and "21" in out.pace_reason
+
+
+# ---------- review fixes
+def test_pace_withheld_for_a_new_user_with_no_six_month_metrics():
+    out = wa.whoop_age(rows_for(25, vo2=None, lbm_pct=None), END, 27.7, "male")
+    assert out.pace is None and out.pace_reason
+
+
+def test_pace_ignores_a_metric_missing_from_one_window():
+    rows = rows_for(182, steps=4000)
+    for r in rows[-30:-20]:
+        r.steps = None                               # 20 step days in the last 30: below the 21 needed there
+    assert wa.whoop_age(rows, END, 30.0, "male").pace == pytest.approx(1.0)
+
+
+def test_consistency_window_scores_its_first_nights_from_earlier_ones():
+    rows = rows_for(60)
+    out = wa.whoop_age(rows, END, 30.0, "male", days=30, min_days=30)
+    assert "Sleep consistency" not in [n for n, _ in out.missing]    # all 30 nights scored, not 28

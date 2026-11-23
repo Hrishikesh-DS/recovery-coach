@@ -34,7 +34,8 @@ rebuild-age IMPORT DAILY LONG OUT SUNDAY
                            snapshots for the 30 Sundays ending SUNDAY. IMPORT: the import's folder (its state.json is
                            not read; settings come from DAILY). Writes OUT/state_daily.json, OUT/state_long.json,
                            OUT/days.json ([{date, <filled fields>}] for the dashboard's day documents) and
-                           OUT/weeks.json (the dashboard's weekly rows, oldest first).
+                           OUT/weeks.json (the dashboard's weekly rows, oldest first, without journal: merge them
+                           into the stored documents so their habit effects stay).
 new-workouts STATE FOLDER  the workouts in the folder's localized workouts.csv not yet scored (not in the state's
                            workout log, or provisional), duplicates collapsed: a JSON list of {"id", "kind", "from",
                            "to"} (from = start, to = end + 3 minutes: the window to fetch raw heart rate for).
@@ -250,7 +251,7 @@ def backfill_weeks(path: Path, dob: str) -> None:
     _print(out)
 
 
-REBUILD_FIELDS = ("z13_min", "z45_min", "lbm_pct")
+REBUILD_FIELDS = ("z13_min", "z45_min", "lbm_pct", "sleep_hr")   # sleep_hr: main kept it for 60 days only
 REBUILD_WEEKS = 30
 
 
@@ -307,7 +308,7 @@ def rebuild_age(import_dir: Path, daily_path: Path, long_path: Path, out: Path, 
             continue
         weeks.append(Week(d, round(wa.delta, 2), tuple(counted)))
         docs.append({"date": d.isoformat(), "body_age": round(wa.body_age, 2), "age": round(age, 2),
-                     "pace": None if wa.pace is None else round(wa.pace, 2), "items": counted, "journal": []})
+                     "pace": None if wa.pace is None else round(wa.pace, 2), "items": counted})
     out.mkdir(parents=True, exist_ok=True)
     (out / "state_daily.json").write_text(json.dumps(compact_state(s, d_rows, None, DAILY_DAYS,
                                                                    workouts=daily.workouts), separators=(",", ":")))
