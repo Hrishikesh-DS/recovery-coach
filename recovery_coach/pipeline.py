@@ -41,7 +41,7 @@ from .stats import robust_baseline
 from .strain import (DEFAULT_K, GAP_CAP_MIN, LAST_READING_MIN, day_strain, dedupe_workouts, hr_max, strain,
                      strain_target, trimp, workout_strain)
 from .state import as_read_back, next_state
-from . import hr_metrics, session
+from . import hr_metrics, session, zones
 from .sleep import recovery_index
 from .stress import stress_day
 
@@ -105,9 +105,9 @@ def strength_minutes(workouts: list[Workout], d: date, worn: bool) -> float | No
 
 
 def workout_zone_minutes(workouts: list[Workout], minutes: list[tuple[datetime, float]], d: date, hrmax: float,
-                         worn: bool) -> tuple[float | None, float | None]:
+                         worn: bool, lim: list[float] | None = None) -> tuple[float | None, float | None]:
     """(zones 1-3, zones 4-5) minutes of minute heart rate inside the (de-duplicated) workouts started on d, by the
-    zone limits of hr_metrics (50/60/70/80/90% HRmax), as WHOOP counts zone time of logged activities. (0, 0) on a
+    zone limits (zones.limits; default 50/60/70/80/90% HRmax), as WHOOP counts zone time of logged activities. (0, 0) on a
     worn day without any; (None, None) when the watch recorded nothing that day."""
     if not worn:
         return None, None
@@ -116,7 +116,7 @@ def workout_zone_minutes(workouts: list[Workout], minutes: list[tuple[datetime, 
     for w in dedupe_workouts(workouts):
         if w.start.date() != d:
             continue
-        z = hr_metrics.zone_minutes(readings, w.start, w.end, hrmax)
+        z = hr_metrics.zone_minutes(readings, w.start, w.end, hrmax, lim)
         z13 += z[0] + z[1] + z[2]
         z45 += z[3] + z[4]
     return z13, z45
@@ -224,8 +224,9 @@ def day_activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax
     workouts = inp.workouts or []
     vitals = inp.vitals or Vitals()
     on = worn(hours, mins)
+    lim = zones.limits(s.zones, hrmax, log, d)
     if on:
-        day_trimp, coverage = trimp(mins, hours, hrmax)
+        day_trimp, coverage = trimp(mins, hours, hrmax, lim)
         day_str, flag = day_strain(day_trimp, coverage, k)
         flag = f"{flag}: {coverage:g} h of heart-rate data" if flag else None
     else:
@@ -242,7 +243,7 @@ def day_activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax
              "steps": sum(h.steps for h in hours) if hours else None,
              "vig_min": minutes_at_or_above(mins, VIGOROUS_FRACTION * hrmax) if on else None,
              "strength_min": strength_minutes(workouts, d, on)}
-    patch["z13_min"], patch["z45_min"] = workout_zone_minutes(workouts, mins, d, hrmax, on)
+    patch["z13_min"], patch["z45_min"] = workout_zone_minutes(workouts, mins, d, hrmax, on, lim)
     if yesterday and vitals.exercise_min_yesterday is not None:
         patch["mvpa_min"] = vitals.exercise_min_yesterday
     if yesterday and vitals.vo2 is not None:
@@ -259,7 +260,7 @@ def day_activity(inp: Inputs, log: list[DayRow], d: date, yesterday: bool, hrmax
         has_hr = any(w.start <= t <= w.end for t, _ in inp.minutes or [])
         shown.append({"kind": w.kind, "start": w.start.isoformat(),
                       "minutes": round((w.end - w.start).total_seconds() / 60),
-                      "strain": round(workout_strain(w, inp.minutes or [], hrmax, k), 1) if has_hr else None})
+                      "strain": round(workout_strain(w, inp.minutes or [], hrmax, k, lim), 1) if has_hr else None})
     stress = {"score": _r(st.score, 2), "band": st.band, "hourly": [[t.isoformat(), round(v, 2)] for t, v in st.hourly],
               "top_hours": [t.isoformat() for t in st.top_hours], "reason": st.reason}
     load_card = {"ctl": _r(ld["ctl"], 1), "atl": _r(ld["atl"], 1), "tsb": _r(ld["tsb"], 1), "acwr": _r(ld["acwr"], 2),
@@ -382,7 +383,8 @@ def run_day(inp: Inputs, today: date | None = None) -> dict:
     # ---- strain card
     t_hours = [h for h in inp.hours or [] if _on(h.start, t)]
     t_mins = [(x, b) for x, b in inp.minutes or [] if _on(x, t)]
-    so_far = strain(trimp(t_mins, t_hours, hrmax)[0], k) if t_hours or t_mins else None
+    so_far = (strain(trimp(t_mins, t_hours, hrmax, zones.limits(s.zones, hrmax, log, t))[0], k)
+              if t_hours or t_mins else None)
     target = list(strain_target(rec.zone, y_patch["tsb"])) if rec.zone is not None else None
     strain_card = {"yesterday": _r(y_patch["strain"], 1), "flag": y_card["flag"], "today_so_far": _r(so_far, 1),
                    "target": target, "workouts": y_card["workouts"]}

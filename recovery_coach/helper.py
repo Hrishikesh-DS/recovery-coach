@@ -45,6 +45,10 @@ series FOLDER              merges raw_speed.csv and raw_power.csv (time,value) a
                            wk_series.csv, with distance as a running total from each workout's start; distance
                            samples longer than 30 s (another source's overlapping copy) are left out. Run it before
                            localize.
+zones STATE D Z2 Z3 Z4 Z5  settings.zones from the four heart rates where the Apple Watch shows zones 2-5 start
+                           on day D (zones.py): {"hrmax", "rest", "rest_mean"} as compact JSON, then a line with
+                           the five limits that gives on D. Merge it into data/settings.engine and state.json's
+                           settings; from then on the zones follow his 30-day resting heart rate.
 localize also rewrites wk_hr.csv, wk_series.csv and night_hr.csv, and the start / end of each workout and lap in
 wk_stats.json.
 
@@ -63,6 +67,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .inputs import (DAY_STEPS, HR, InputError, _cell, _csv_rows, parse_time, read_hours, read_state, workout_id,
                      read_workouts)
 from .pipeline import activity_from
+from . import zones as zn
 from .workout_log import find_logged, needs_rescore
 
 STAMP = "%Y-%m-%dT%H:%M%z"
@@ -209,6 +214,20 @@ def _date(text: str, where: str) -> date:
 
 def first_day(state: Path, t: str) -> None:
     print(activity_from(read_state(state).rows, _date(t, "T")).isoformat())
+
+
+def zones_from_apple(state: Path, d: str, starts: list[str]) -> None:
+    day = _date(d, "D")
+    try:
+        bpm = [float(x) for x in starts]
+        top, rest = zn.from_apple(bpm)
+    except ValueError as e:
+        raise InputError("Z2-Z5", None, str(e)) from None
+    spec = {"hrmax": top, "rest": rest, "rest_mean": None}
+    mean = zn.rest_mean(read_state(state).rows, day)
+    spec["rest_mean"] = round(mean, 1) if mean is not None else None
+    _print(spec)
+    print("limits on " + day.isoformat() + ": " + ", ".join(f"{x:.0f}" for x in zn.limits(spec, top)))
 
 
 def _load(path: Path, key: str | None = None):
@@ -414,7 +433,8 @@ def main(argv: list[str] | None = None) -> int:
                        ("aggregate", ["folder", "hrmax"]), ("first-day", ["state", "t"]),
                        ("emit", ["file", "key", "since?"]), ("week", ["file"]), ("backfill-weeks", ["file", "dob"]),
                        ("sizes", ["folder"]), ("new-workouts", ["state", "folder"]), ("workout-doc", ["file", "id"]),
-                       ("series", ["folder"]), ("rebuild-age", ["import_dir", "daily", "long", "out", "sunday"])):
+                       ("series", ["folder"]), ("rebuild-age", ["import_dir", "daily", "long", "out", "sunday"]),
+                       ("zones", ["state", "d", "z2", "z3", "z4", "z5"])):
         p = sub.add_parser(name)
         for a in args:
             p.add_argument(a.rstrip("?"), nargs="?" if a.endswith("?") else None)
@@ -445,6 +465,8 @@ def main(argv: list[str] | None = None) -> int:
             workout_doc(Path(a.file), a.id)
         elif a.command == "series":
             series(Path(a.folder))
+        elif a.command == "zones":
+            zones_from_apple(Path(a.state), a.d, [a.z2, a.z3, a.z4, a.z5])
         elif a.command == "rebuild-age":
             rebuild_age(Path(a.import_dir), Path(a.daily), Path(a.long), Path(a.out), a.sunday)
         else:

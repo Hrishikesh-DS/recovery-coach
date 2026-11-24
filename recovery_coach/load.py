@@ -56,11 +56,13 @@ def acwr_flag(x: float) -> str | None:
     return None
 
 
-def seed_from_workouts(ws: list[Workout], hrmax: float, days: list[date]) -> dict[date, float]:
-    """Approximate daily TRIMP: duration x zone weight of avg HR, per local start date."""
+def seed_from_workouts(ws: list[Workout], hrmax: float, days: list[date], lim_for=None) -> dict[date, float]:
+    """Approximate daily TRIMP: duration x zone weight of avg HR, per local start date. lim_for(d) = that day's
+    zone limits (default % of HRmax)."""
     out = {d: 0.0 for d in days}
     for w in dedupe_workouts(ws):
         d = w.start.date()  # local date from the timestamp's own offset
         if d in out and w.avg_hr is not None:
-            out[d] += (w.end - w.start).total_seconds() / 60.0 * zone_weight(w.avg_hr, hrmax)
+            lim = lim_for(d) if lim_for else None
+            out[d] += (w.end - w.start).total_seconds() / 60.0 * zone_weight(w.avg_hr, hrmax, lim)
     return out

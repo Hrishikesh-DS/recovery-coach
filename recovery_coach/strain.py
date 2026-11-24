@@ -6,6 +6,7 @@ import statistics
 from dataclasses import replace
 from datetime import datetime
 
+from . import zones
 from .inputs import HourStat, Workout
 
 GAP_CAP_MIN = 5.0
@@ -20,13 +21,10 @@ TSB_SHIFT = 2  # my call
 DUPLICATE_OVERLAP = 0.8
 
 
-def zone_weight(bpm: float, hrmax: float) -> int:
-    """Edwards zone weight: 50/60/70/80/90 % of HRmax -> 1..5, below 50 % -> 0."""
-    pct = bpm / hrmax * 100.0
-    for limit, weight in ((90, 5), (80, 4), (70, 3), (60, 2), (50, 1)):
-        if pct >= limit:
-            return weight
-    return 0
+def zone_weight(bpm: float, hrmax: float, lim: list[float] | None = None) -> int:
+    """Edwards zone weight: zone 1..5 -> 1..5, below zone 1 -> 0. lim = the zone limits (zones.limits), default
+    50/60/70/80/90 % of HRmax."""
+    return zones.zone_of(bpm, lim or zones.default_limits(hrmax))
 
 
 def _duration_min(w: Workout) -> float:
@@ -87,24 +85,24 @@ def hr_max(daily_max: list[float], age: float | None = None) -> float | None:
     return max(estimate, observed)
 
 
-def _trimp_from(readings: list[tuple[datetime, float]], hrmax: float) -> float:
+def _trimp_from(readings: list[tuple[datetime, float]], hrmax: float, lim: list[float] | None = None) -> float:
     total = 0.0
     for i, (t, bpm) in enumerate(readings):
         if i + 1 < len(readings):
             minutes = min((readings[i + 1][0] - t).total_seconds() / 60.0, GAP_CAP_MIN)
         else:
             minutes = LAST_READING_MIN
-        total += minutes * zone_weight(bpm, hrmax)
+        total += minutes * zone_weight(bpm, hrmax, lim)
     return total
 
 
 def trimp(
-    minutes: list[tuple[datetime, float]], hours: list[HourStat], hrmax: float
+    minutes: list[tuple[datetime, float]], hours: list[HourStat], hrmax: float, lim: list[float] | None = None
 ) -> tuple[float, float]:
     """Edwards TRIMP from minute readings; coverage = hours with an average HR."""
     readings = sorted(minutes, key=lambda r: r[0])
     coverage = float(sum(1 for h in hours if h.avg_hr is not None))
-    return _trimp_from(readings, hrmax), coverage
+    return _trimp_from(readings, hrmax, lim), coverage
 
 
 def strain(trimp: float, k: float) -> float:
@@ -130,10 +128,10 @@ def day_strain(trimp: float, coverage_hours: float, k: float) -> tuple[float | N
 
 
 def workout_strain(
-    w: Workout, minutes: list[tuple[datetime, float]], hrmax: float, k: float
+    w: Workout, minutes: list[tuple[datetime, float]], hrmax: float, k: float, lim: list[float] | None = None
 ) -> float:
     inside = sorted((r for r in minutes if w.start <= r[0] <= w.end), key=lambda r: r[0])
-    return strain(_trimp_from(inside, hrmax), k)
+    return strain(_trimp_from(inside, hrmax, lim), k)
 
 
 def strain_target(zone: str, tsb: float | None) -> tuple[float, float]:

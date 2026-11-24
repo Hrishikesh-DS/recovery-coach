@@ -30,6 +30,8 @@ import math
 import statistics
 from datetime import datetime, timedelta
 
+from . import zones
+
 DENSE_GAP_S = 15.0
 MAX_STEP_S = 60.0
 ZONE_LIMITS = (0.5, 0.6, 0.7, 0.8, 0.9)
@@ -61,14 +63,15 @@ def _r(bpm: float, rest: float, hrmax: float) -> float:
     return min(max((bpm - rest) / (hrmax - rest), 0.0), 1.0)
 
 
-def zone_minutes(samples: Samples, start: datetime, end: datetime, hrmax: float) -> list[float]:
+def zone_minutes(samples: Samples, start: datetime, end: datetime, hrmax: float,
+                 lim: list[float] | None = None) -> list[float]:
+    """Minutes in zones 1-5; lim = the zone limits (zones.limits), default % of HRmax."""
+    lim = lim or zones.default_limits(hrmax)
     z = [0.0] * 5
     for bpm, m in _weighted(samples, start, end):
-        pct = bpm / hrmax
-        for i in range(4, -1, -1):
-            if pct >= ZONE_LIMITS[i]:
-                z[i] += m
-                break
+        i = zones.zone_of(bpm, lim)
+        if i:
+            z[i - 1] += m
     return z
 
 
@@ -127,7 +130,7 @@ def hr_recovery(samples: Samples, end: datetime, hrmax: float, now: datetime) ->
         return out
     peak = end_hr(samples, end)
     out["end_hr"] = round(peak, 1) if peak is not None else None
-    if peak is None or peak < ZONE4 * hrmax:
+    if peak is None or peak < ZONE4 * hrmax:   # an effort level (80 % HRmax), not the display zones
         out["reason"] = "didn't reach zone 4"
         return out
     at60 = _window_mean(samples, end + timedelta(seconds=50), end + timedelta(seconds=70))

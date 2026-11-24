@@ -34,7 +34,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from . import hr_metrics as hm
-from . import race, running, training
+from . import race, running, training, zones
 from .effect import training_effect
 from .inputs import DayRow, Inputs, RunPoint, Settings, Workout, WorkoutStats, workout_id
 from .strain import dedupe_workouts, strain
@@ -189,12 +189,13 @@ def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint
     if not any(e.kind == kind for e in history):
         notes.append("no history yet")
     inside = [x for x in hr if w.start <= x[0] < w.end]
-    zones = hm.zone_minutes(hr, w.start, w.end, hrmax) if inside else [0.0] * 5
+    lim = zones.limits(settings.zones, hrmax, rows, w.start.date())
+    zone_min = hm.zone_minutes(hr, w.start, w.end, hrmax, lim) if inside else [0.0] * 5
     hr_block = {"avg": _r(sum(b for _, b in inside) / len(inside), 0) if inside else None,
                 "max": _r(max(b for _, b in inside), 0) if inside else None,
-                "zones": [round(z, 1) for z in zones], "split": [round(z, 1) for z in hm.split(zones)],
+                "zones": [round(z, 1) for z in zone_min], "split": [round(z, 1) for z in hm.split(zone_min)],
                 "trace": _trace(hr, w.start, w.end + AFTER, TRACE_STEP_S),
-                "limits": [round(f * hrmax) for f in hm.ZONE_LIMITS]}
+                "limits": [round(x) for x in lim]}
     effort, src = _effort(w.start, st, answers)
     load = {"strain": None, "edwards": None, "banister": None, "hrss": None, "intensity_pct": None, "azm": None,
             "effort": effort, "effort_src": src, "srpe": _r(effort * minutes, 0) if effort else None,
@@ -203,13 +204,13 @@ def score_workout(w: Workout, st: WorkoutStats | None, hr, series: list[RunPoint
     rec = {"hrr60": None, "hrr120": None, "end_hr": None, "flag": None, "reason": None, "provisional": False,
            "apple": st.cardio_recovery if st else None, "hrrc": None}
     if inside:
-        edw = sum(z * (i + 1) for i, z in enumerate(zones))
+        edw = sum(z * (i + 1) for i, z in enumerate(zone_min))
         ban = hm.banister(hr, w.start, w.end, rest, hrmax, bk)
         load.update(strain=_r(strain(edw, k), 1), edwards=_r(edw), banister=_r(ban),
                     hrss=_r(hm.hrss(hr, w.start, w.end, rest, hrmax, bk, lt)),
                     intensity_pct=_r(hm.intensity_pct(ban, minutes, bk), 0),
                     azm=_r(hm.azm(hr, w.start, w.end, rest, hrmax), 0))
-        te = training_effect(hr, w.start, w.end, rest, hrmax, vo2max, zones)
+        te = training_effect(hr, w.start, w.end, rest, hrmax, vo2max, zone_min)
         effect.update(te=_r(te["te"]), te_an=_r(te["te_an"]), rec_h=_r(te["rec_h"]), benefit=te["benefit"],
                       reason=te["reason"])
         rec.update(hm.hr_recovery(hr, w.end, hrmax, now))

@@ -11,7 +11,7 @@ Built for an Apple Watch Ultra 2 (no Apple Readiness score on that model), but i
 | Score | Range | In short |
 |---|---|---|
 | Recovery | 0–100 % (green ≥ 67, yellow 34–66, red ≤ 33) | Last night's HRV (60 %), sleeping heart rate (20 %), sleep performance (15 %) and breathing rate (5 %), each against your own 60-day normal (median ± MAD), mapped through a logistic. One very bad signal caps the score so it can't be averaged away. |
-| Strain | 0–21 | Edwards TRIMP over the whole day (heart-rate zones 50–100 % HRmax, weights 1–5), mapped as `21 × (1 − e^(−TRIMP/K))`, K calibrated to your own days. Per-workout strain too. |
+| Strain | 0–21 | Edwards TRIMP over the whole day (heart-rate zones weighted 1–5: 50–100 % HRmax, or your Apple Watch's heart-rate-reserve zones when `settings.zones` is set — see `zones.py`), mapped as `21 × (1 − e^(−TRIMP/K))`, K calibrated to your own days. Per-workout strain too. |
 | Sleep | % of need | Need = your goal + recent sleep debt (14-night weighted, ≤ 2 h) + extra after high-strain days. Also efficiency, consistency, interruptions and a suggested bedtime. |
 | Strain target | band | Suggested strain for today from the recovery zone, lowered when form (TSB) is very negative. |
 | Training load | CTL / ATL / TSB, ACWR | Fitness (42-day), fatigue (7-day), form, and an acute:chronic ratio flag for spikes or detraining. |

@@ -24,7 +24,9 @@ from bisect import bisect_left, bisect_right
 from dataclasses import replace
 from datetime import date, timedelta
 
-from . import load
+from types import SimpleNamespace
+
+from . import load, zones
 from .whoop_age import whoop_age
 from .inputs import DayRow, InputError, Inputs, State, Week, row_to_dict
 from .monitor import health_flags
@@ -87,9 +89,13 @@ def backfill(inp: Inputs, until: date | None = None) -> dict:
         return sum(1 for n in nights.values() if any(x.type == kind for x in in_night(n)))
     rmssd_nights = nights_with("R")
     hrv_type = "rmssd" if rmssd_nights >= max(MIN_RMSSD_NIGHTS, nights_with("S")) else "sdnn"
-    seeded = load.seed_from_workouts(workouts, hrmax, span)
-    day_trimps = {d: trimp(mins_on.get(d, []), hours_on.get(d, []), hrmax)[0] if d in covered else seeded[d]
-                  for d in span}
+    rest_rows = [SimpleNamespace(date=d.isoformat(), rhr=x.rhr, sleep_hr=None) for d, x in daily.items()]
+
+    def lim_for(d):
+        return zones.limits(s.zones, hrmax, rest_rows, d)
+    seeded = load.seed_from_workouts(workouts, hrmax, span, lim_for)
+    day_trimps = {d: trimp(mins_on.get(d, []), hours_on.get(d, []), hrmax, lim_for(d))[0] if d in covered
+                  else seeded[d] for d in span}
     k = round(calibrate_k(list(day_trimps.values())), 1)
     goal = s.sleep_goal_min
 

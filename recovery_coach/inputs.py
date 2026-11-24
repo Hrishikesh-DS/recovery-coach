@@ -307,6 +307,7 @@ class Settings:
     questions: list[str] = field(default_factory=list)
     weight_kg: float | None = None
     height_m: float | None = None
+    zones: dict | None = None    # personal heart-rate zones (zones.py); None: % of HRmax
 
 
 @dataclass
@@ -799,7 +800,21 @@ def _settings(doc, file: str) -> Settings:
         hrv_type=hrv_type, questions=list(questions),
         weight_kg=_num(s.get("weight_kg"), file, "settings.weight_kg", WEIGHT, " (kg)"),
         height_m=_num(s.get("height_m"), file, "settings.height_m", HEIGHT, " (metres, not cm)"),
+        zones=_zones(s.get("zones"), file),
     )
+
+
+def _zones(z, file: str) -> dict | None:
+    if z is None:
+        return None
+    if not isinstance(z, dict) or set(z) - {"hrmax", "rest", "rest_mean"} or "hrmax" not in z or "rest" not in z:
+        raise InputError(file, None, "settings.zones must be {hrmax, rest, rest_mean}")
+    out = {"hrmax": _num(z["hrmax"], file, "settings.zones.hrmax", (100, 230)),
+           "rest": _num(z["rest"], file, "settings.zones.rest", (30, 120)),
+           "rest_mean": _num(z.get("rest_mean"), file, "settings.zones.rest_mean", (30, 120))}
+    if out["rest"] >= out["hrmax"]:
+        raise InputError(file, None, "settings.zones.rest must be below settings.zones.hrmax")
+    return out
 
 
 def read_state_long(path: Path) -> State:
