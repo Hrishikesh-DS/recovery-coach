@@ -45,6 +45,12 @@ def test_zones_follow_resting_hr():
     assert lower[4] == pytest.approx(177 - 4 * 0.1)
 
 
+def test_zone1_starts_at_half_hrmax():
+    lim = zones.limits(APPLE, 188.6, rows(68.4, date(2026, 11, 24)), date(2026, 11, 24))
+    assert lim[0] == pytest.approx(94.3)
+    assert zones.zone_of(110, lim) == 1      # a brisk walk still counts
+
+
 def test_no_resting_data_keeps_the_anchor():
     lim = zones.limits(APPLE, 188.6, [], date(2027, 1, 1))
     assert [round(x) for x in lim[1:]] == [141, 153, 165, 177]
@@ -103,7 +109,7 @@ def test_helper_zones(tmp_path, capsys):
     assert helper_main(["zones", str(state), "2026-11-24", "141", "153", "165", "177"]) == 0
     out = capsys.readouterr().out.splitlines()
     assert json.loads(out[0]) == {"hrmax": 189.0, "rest": 69.0, "rest_mean": 69.0}
-    assert out[1] == "limits on 2026-11-24: 129, 141, 153, 165, 177"
+    assert out[1] == "limits on 2026-11-24: 94, 141, 153, 165, 177"
     assert helper_main(["zones", str(state), "2026-11-24", "177", "165", "153", "141"]) == 2
 
 

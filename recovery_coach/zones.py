@@ -8,8 +8,8 @@ strain, zone minutes, the benefit label, the card's zone bars). Heart-rate recov
   watch shows (`helper zones`, which fits M and R to them and stores B, his 30-day mean resting heart rate that day),
   so on that day the limits are the watch's; after that rest = R + (the 30-day mean on the day - B), so the zones
   follow his resting heart rate as Apple's do, from the same baseline.
-  Zone 1's lower edge (50 % of reserve) has no Apple counterpart (Apple's zone 1 is everything below zone 2); below
-  it counts as no zone, as in Edwards.
+  Apple's zone 1 is everything below zone 2, so zone 1 here starts where Edwards' does, 50 % of HRmax (light
+  activity such as walking still counts), and only below that is no zone.
 """
 from __future__ import annotations
 
@@ -42,7 +42,8 @@ def limits(spec: dict | None, hrmax: float, rows=(), d: date | None = None) -> l
     if now is not None and spec.get("rest_mean") is not None:
         rest += now - spec["rest_mean"]
     top = spec["hrmax"]
-    return [rest + f * (top - rest) for f in FRACTIONS]
+    reserve = [rest + f * (top - rest) for f in FRACTIONS[1:]]
+    return [min(FRACTIONS[0] * hrmax, reserve[0])] + reserve
 
 
 def zone_of(bpm: float, lim: list[float]) -> int:
